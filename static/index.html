@@ -88,6 +88,28 @@ th { color: var(--muted); font-weight: 600; font-size: 11px; text-transform: upp
 .leaflet-container { background: var(--surface); font: inherit; }
 .mc { background: color-mix(in srgb, var(--s2) 85%, transparent); border: 2px solid var(--card); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 11px; }
 footer { color: var(--muted); font-size: 12px; padding: 0 24px 30px; max-width: 1600px; margin: 0 auto; }
+.actions { margin-left: auto; display: flex; gap: 8px; align-items: end; }
+.btn { font: inherit; font-size: 13px; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--ink); cursor: pointer; white-space: nowrap; }
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
+.btn:focus-visible, .menu button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.dd { position: relative; }
+.menu { position: absolute; right: 0; top: calc(100% + 6px); background: var(--card); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.14); padding: 6px; min-width: 280px; z-index: 2000; }
+.menu button { display: block; width: 100%; text-align: left; font: inherit; font-size: 13px; background: none; border: 0; padding: 8px 10px; border-radius: 6px; color: var(--ink); cursor: pointer; }
+.menu button:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.menu small { display: block; color: var(--muted); font-size: 11px; }
+.toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--ink); color: var(--page); padding: 10px 16px; border-radius: 8px; font-size: 13px; z-index: 3000; box-shadow: 0 6px 20px rgba(0,0,0,.2); }
+.card h3 { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.mini { font: inherit; font-size: 11px; font-weight: 500; color: var(--muted); background: none; border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; cursor: pointer; }
+.mini:hover { color: var(--accent); border-color: var(--accent); }
+@media (max-width: 640px) { .actions { margin-left: 0; } }
+@media print {
+  header { position: static; } nav.tabs, .filters .actions, .filters button.reset, .mini, .leaflet-control-zoom { display: none !important; }
+  .filters select { border: 0; appearance: none; padding: 0; min-width: 0; }
+  body { background: #fff; } .card, .strip { break-inside: avoid; } main { padding: 8px; }
+  .grid { gap: 8px; } .c2 { grid-column: span 2 !important; } .c3 { grid-column: span 3 !important; } .c4 { grid-column: span 4 !important; } .c6 { grid-column: span 6 !important; }
+  .tbl { max-height: none; overflow: visible; }
+}
 </style>
 </head>
 <body>
@@ -103,6 +125,19 @@ footer { color: var(--muted); font-size: 12px; padding: 0 24px 30px; max-width: 
     <label>Vaccine<select id="fVaccine"><option value="">MR + fIPV</option><option value="MR">Measles-Rubella (MR)</option><option value="IPV">fIPV</option></select></label>
     <label>Delivery mode<select id="fMode"><option value="">All modes</option><option>Fixed post</option><option>House to house</option><option>Transit post</option></select></label>
     <button class="reset" id="reset">Reset</button>
+    <span class="actions">
+      <span class="dd">
+        <button class="btn" id="dlBtn" aria-haspopup="menu" aria-expanded="false">⤓ Download ▾</button>
+        <div class="menu" id="dlMenu" role="menu" hidden>
+          <button role="menuitem" data-dl="pdf">This tab as PDF<small>Opens the print dialog; choose “Save as PDF”</small></button>
+          <button role="menuitem" data-dl="csv">District summary (CSV)<small>Every KPI per district, current filters</small></button>
+          <button role="menuitem" data-dl="tables">Tables on this tab (CSV)<small>One file per table</small></button>
+          <button role="menuitem" data-dl="png">Charts on this tab (PNG)<small>One image per chart</small></button>
+          <button role="menuitem" data-dl="json">Full data snapshot (JSON)</button>
+        </div>
+      </span>
+      <button class="btn primary" id="shareBtn">↗ Share</button>
+    </span>
   </div>
   <nav class="tabs" id="tabs"></nav>
 </header>
@@ -155,7 +190,9 @@ function kpi(cls, title, value, extra = "", barFrac = null, barColor = "--s1") {
 function card(cls, id, title, note = "", kind = "chart") {
   const inner = kind === "map" ? `<div class="map" id="${id}"></div><div class="legend" id="${id}-lg"></div>`
               : kind === "table" ? `<div class="tbl" id="${id}"></div>` : `<div class="chart ${kind === "tall" ? "tall" : ""}" id="${id}"></div>`;
-  return `<div class="card ${cls}"><h3>${title}</h3>${note ? `<p class="note">${note}</p>` : ""}${inner}</div>`;
+  const tool = kind === "table" ? `<button class="mini" data-csv="${id}" title="Download this table as CSV">CSV</button>`
+             : kind === "map" ? "" : `<button class="mini" data-png="${id}" title="Download this chart as PNG">PNG</button>`;
+  return `<div class="card ${cls}"><h3><span data-title="${id}">${title}</span>${tool}</h3>${note ? `<p class="note">${note}</p>` : ""}${inner}</div>`;
 }
 function table(id, cols, rows) {
   const el = document.getElementById(id); if (!el) return;
@@ -379,7 +416,8 @@ const R = {
       <div class="grid">${card("c12", "in-pos", "Stock position by district store", "", "table")}</div>`,
       () => {
         const ds = D.districts.filter(d => C.has(d.code)), s = Object.fromEntries(st.map(r => [r.code + r.product, r]));
-        draw("in-days", { tooltip: Object.assign(base().tooltip, { valueFormatter: v => v == null ? "–" : v.toFixed(1) + " days" }), xAxis: axisCat(ds.map(d => d.district), 60), yAxis: axisVal(v => v),
+        draw("in-days", { tooltip: Object.assign(base().tooltip, { valueFormatter: v => v == null ? "–" : v.toFixed(1) + " days" }), xAxis: axisCat(ds.map(d => d.district), 60),
+          yAxis: Object.assign(axisVal(v => v), { max: v => Math.ceil(Math.max(v.max, 11 - D.coverage[0].days_elapsed) * 1.1) }),
           series: prods().map((p, i) => Object.assign(barS(PNAME[p], ds.map(d => s[d.code + p]?.days_of_stock != null ? +s[d.code + p].days_of_stock.toFixed(1) : null), i ? "--s2" : "--s1"), i ? {} : { markLine: { silent: true, symbol: "none", lineStyle: { color: css("--critical"), type: "dashed" }, label: { position: "insideEndTop", formatter: "Days remaining: " + (11 - D.coverage[0].days_elapsed), color: css("--ink-2") }, data: [{ yAxis: 11 - D.coverage[0].days_elapsed }] } })) });
         draw("in-waste", { tooltip: Object.assign(base().tooltip, pctTip), xAxis: axisCat(ds.map(d => d.district), 60), yAxis: axisVal(v => (v * 100).toFixed(0) + "%"),
           series: prods().map((p, i) => Object.assign(barS(PNAME[p], ds.map(d => +wastage(p, new Set([d.code])).toFixed(4)), i ? "--s2" : "--s1"), i ? {} : { markLine: { silent: true, symbol: "none", lineStyle: { color: css("--muted"), type: "dashed" }, label: { position: "insideEndTop", formatter: "Plan 5%", color: css("--ink-2") }, data: [{ yAxis: .05 }] } })) });
@@ -527,6 +565,121 @@ function render() {
   after();
   document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.t === active));
   try { localStorage.setItem("hcm-tab", active); } catch (e) {}
+  history.replaceState(null, "", shareUrl());
+}
+
+// ---------------------------------------------------------------- share & download
+function shareUrl() {
+  const p = new URLSearchParams();
+  if (active !== "Overview") p.set("tab", active);
+  for (const k of ["region", "district", "vaccine", "mode"]) if (F[k]) p.set(k, F[k]);
+  const q = p.toString();
+  return location.origin + location.pathname + (q ? "?" + q : "");
+}
+function readUrl() {
+  const p = new URLSearchParams(location.search);
+  const t = p.get("tab"); if (TABS.includes(t)) active = t;
+  const regs = new Set(D.districts.map(d => d.region)), dists = new Set(D.districts.map(d => d.district));
+  if (regs.has(p.get("region"))) F.region = p.get("region");
+  if (dists.has(p.get("district"))) { F.district = p.get("district"); F.region = D.districts.find(d => d.district === F.district).region; }
+  if (["MR", "IPV"].includes(p.get("vaccine"))) F.vaccine = p.get("vaccine");
+  if (MODES.includes(p.get("mode"))) F.mode = p.get("mode");
+  return p.toString() !== "";
+}
+function toast(msg) {
+  const t = document.createElement("div"); t.className = "toast"; t.setAttribute("role", "status"); t.textContent = msg;
+  document.body.appendChild(t); setTimeout(() => t.remove(), 2600);
+}
+function filterLabel() {
+  return [F.district || F.region || "All regions", F.vaccine ? PNAME[F.vaccine] : "MR + fIPV", F.mode || "All modes"].join(" · ");
+}
+async function share() {
+  const url = shareUrl(), title = `IPV-MR dashboard – ${active} (${filterLabel()})`;
+  if (navigator.share && matchMedia("(pointer: coarse)").matches) {
+    try { await navigator.share({ title, text: title, url }); return; } catch (e) { if (e.name === "AbortError") return; }
+  }
+  try { await navigator.clipboard.writeText(url); toast("Link copied – it opens this tab with the same filters"); }
+  catch (e) { prompt("Copy this link:", url); }
+}
+const slug = s => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+function fileBase() { return `ipv-mr_${slug(active)}_${slug(filterLabel())}_${D.generated.slice(0, 10)}`; }
+function save(name, blob) {
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+const csvCell = v => { const s = v == null ? "" : String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+const toCsv = rows => "﻿" + rows.map(r => r.map(csvCell).join(",")).join("\r\n");
+function tableCsv(id) {
+  const t = document.querySelector(`#${id} table`); if (!t) return null;
+  return toCsv([...t.querySelectorAll("tr")].map(tr => [...tr.children].map(c => c.innerText.trim())));
+}
+function districtSummary() {
+  const C = codes(), de = D.coverage[0].days_elapsed;
+  const st = Object.fromEntries(D.stock.filter(r => r.level === 3).map(r => [r.code + r.product, r]));
+  const dq = Object.fromEntries(D.dq.map(r => [r.code, r])), cb = Object.fromEntries(D.coadmin.map(r => [r.code, r]));
+  const cp = by(D.complaints, r => r.code);
+  const chk = by(D.checklist_completion.filter(r => r.district), r => r.district);
+  const sy = g => Object.fromEntries(D.sync.filter(r => r.g === g).map(r => [r.district, r]));
+  const fl = sy("Frontline workers"), dn = sy("Vaccinators downsynced");
+  const r4 = v => v == null || !isFinite(v) ? "" : +v.toFixed(4);
+  const head = ["region", "district", "boundary_code", "mr_target", "mr_doses", "mr_coverage", "ipv_target", "ipv_doses", "ipv_coverage",
+    "doses_vs_plan_to_date", "both_vaccines_9_59m", "mr_wastage", "ipv_wastage", "mr_days_of_stock", "ipv_days_of_stock", "mr_stock_status",
+    "gps_or_duplicate_issue_rate", "incomplete_registration_rate", "frontline_sync_rate", "downsync_rate", "checklist_completion", "complaints", "complaints_resolved"];
+  const rows = D.districts.filter(d => C.has(d.code)).map(d => {
+    const one = new Set([d.code]), q = dq[d.code], c = cp[d.code] || [], k = chk[d.district] || [];
+    return [d.region, d.district, d.code, d.mr_target, doses("MR", one), r4(cov("MR", one)), d.ipv_target, doses("IPV", one), r4(cov("IPV", one)),
+      r4(vsPlan(one)), r4(cb[d.code].both / cb[d.code].kids), r4(wastage("MR", one)), r4(wastage("IPV", one)),
+      r4(st[d.code + "MR"]?.days_of_stock), r4(st[d.code + "IPV"]?.days_of_stock), st[d.code + "MR"]?.stock_status ?? "",
+      r4((q.missing_gps + q.low_accuracy + q.outside_district + q.duplicates) / q.records), r4(q.incomplete / q.registrations),
+      r4(fl[d.district] && fl[d.district].synced / fl[d.district].total), r4(dn[d.district] && dn[d.district].synced / dn[d.district].total),
+      r4(sum(k, x => x.submitted) / sum(k, x => x.expected)), sum(c, x => x.n), sum(c, x => x.resolved)];
+  });
+  return toCsv([[`# IPV-MR campaign snapshot ${D.generated} (day ${de} of 11), synthetic field data. Filters: ${filterLabel()}. Delivery-mode filter applies to doses only.`], head, ...rows]);
+}
+function chartPng(id) {
+  const c = charts[id]; if (!c) return null;
+  const tmp = echarts.init(document.createElement("div"), null, { renderer: "canvas", width: c.getWidth(), height: c.getHeight() });
+  const opt = c.getOption(); opt.animation = false;
+  const title = document.querySelector(`[data-title="${id}"]`)?.textContent || id;
+  opt.title = [{ text: title, subtext: filterLabel(), left: "center", top: 0, textStyle: { fontSize: 13, color: css("--ink") }, subtextStyle: { color: css("--muted") } }];
+  opt.grid = (opt.grid || []).map(g => Object.assign(g, { top: (g.top || 36) + 40 }));
+  opt.legend = (opt.legend || []).map(l => Object.assign(l, { top: 40 }));
+  opt.series.forEach(s => { if (s.type === "sankey") s.top = 50; });
+  tmp.setOption(opt);
+  const url = tmp.getDataURL({ type: "png", pixelRatio: 2, backgroundColor: css("--card") });
+  tmp.dispose();
+  return fetch(url).then(r => r.blob());
+}
+async function download(kind) {
+  const base = fileBase();
+  if (kind === "pdf") { Object.values(maps).forEach(m => m.invalidateSize()); setTimeout(() => window.print(), 200); return; }
+  if (kind === "csv") return save(`ipv-mr_district-summary_${slug(filterLabel())}_${D.generated.slice(0, 10)}.csv`, new Blob([districtSummary()], { type: "text/csv" }));
+  if (kind === "json") { const { dmap, ...raw } = D; return save(`ipv-mr_snapshot_${D.generated.slice(0, 10)}.json`, new Blob([JSON.stringify(raw)], { type: "application/json" })); }
+  if (kind === "tables") {
+    const ids = [...document.querySelectorAll("section.tab.on .tbl")].map(e => e.id);
+    if (!ids.length) return toast("This tab has no tables – try District summary (CSV)");
+    for (const id of ids) { save(`${base}_${slug(document.querySelector(`[data-title="${id}"]`).textContent)}.csv`, new Blob([tableCsv(id)], { type: "text/csv" })); await new Promise(r => setTimeout(r, 250)); }
+    return toast(`${ids.length} table${ids.length > 1 ? "s" : ""} downloaded`);
+  }
+  if (kind === "png") {
+    const ids = Object.keys(charts);
+    for (const id of ids) { save(`${base}_${slug(document.querySelector(`[data-title="${id}"]`).textContent)}.png`, await chartPng(id)); await new Promise(r => setTimeout(r, 250)); }
+    return toast(`${ids.length} chart image${ids.length > 1 ? "s" : ""} downloaded (maps: use PDF)`);
+  }
+}
+function wireActions() {
+  const btn = document.getElementById("dlBtn"), menu = document.getElementById("dlMenu");
+  const close = () => { menu.hidden = true; btn.setAttribute("aria-expanded", "false"); };
+  btn.onclick = e => { e.stopPropagation(); menu.hidden = !menu.hidden; btn.setAttribute("aria-expanded", String(!menu.hidden)); if (!menu.hidden) menu.querySelector("button").focus(); };
+  menu.onclick = e => { const b = e.target.closest("[data-dl]"); if (b) { close(); download(b.dataset.dl); } };
+  document.addEventListener("click", close);
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && !menu.hidden) { close(); btn.focus(); } });
+  document.getElementById("shareBtn").onclick = share;
+  document.getElementById("main").addEventListener("click", async e => {
+    const c = e.target.closest("[data-csv]"), p = e.target.closest("[data-png]");
+    if (c) save(`${fileBase()}_${slug(document.querySelector(`[data-title="${c.dataset.csv}"]`).textContent)}.csv`, new Blob([tableCsv(c.dataset.csv)], { type: "text/csv" }));
+    if (p) save(`${fileBase()}_${slug(document.querySelector(`[data-title="${p.dataset.png}"]`).textContent)}.png`, await chartPng(p.dataset.png));
+  });
 }
 function fillDistricts() {
   const ds = D.districts.filter(d => !F.region || d.region === F.region);
@@ -544,7 +697,10 @@ async function start() {
   const on = (id, k) => document.getElementById(id).onchange = e => { F[k] = e.target.value; if (k === "region") { F.district = ""; fillDistricts(); } render(); };
   on("fRegion", "region"); on("fDistrict", "district"); on("fVaccine", "vaccine"); on("fMode", "mode");
   document.getElementById("reset").onclick = () => { F = { region: "", district: "", vaccine: "", mode: "" }; ["fRegion", "fVaccine", "fMode"].forEach(i => document.getElementById(i).value = ""); fillDistricts(); render(); };
-  try { const t = localStorage.getItem("hcm-tab"); if (TABS.includes(t)) active = t; } catch (e) {}
+  if (!readUrl()) { try { const t = localStorage.getItem("hcm-tab"); if (TABS.includes(t)) active = t; } catch (e) {} }
+  document.getElementById("fRegion").value = F.region; fillDistricts();
+  document.getElementById("fVaccine").value = F.vaccine; document.getElementById("fMode").value = F.mode;
+  wireActions();
   document.getElementById("foot").innerHTML = `Snapshot generated ${esc(D.generated)} from the Superset build (day ${D.coverage[0].days_elapsed} of 11). Field records are <b>synthetic</b>; targets from the IPV-MR microplan. District boundaries are approximate (geoBoundaries + OSM-derived). Map tiles © OpenStreetMap contributors. Live version: Superset 6.1 over HCM Elasticsearch.`;
   render();
   window.addEventListener("resize", () => Object.values(charts).forEach(c => c.resize()));
