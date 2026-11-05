@@ -1,0 +1,7 @@
+WITH b AS (SELECT json_extract(h, '$._source.Data') AS x FROM TABLE(hcm.system.raw_query('default', 'project-task-index-v1', '{"size":10000,"_source":["Data.latitude","Data.longitude","Data.productCode","Data.reasonNotAdministered","Data.deliveryMode","Data.boundaryHierarchyCode","Data.eventTime","Data.teamId"],"query":{"bool":{"must_not":[{"term":{"Data.administrationStatus":"ADMINISTRATION_SUCCESS"}}],"filter":[{"exists":{"field":"Data.latitude"}}]}},"sort":[{"Data.createdTime":"desc"}]}')) CROSS JOIN UNNEST(CAST(json_extract(result, '$.hits.hits') AS array(json))) AS t(h))
+SELECT d.region, d.district, d.boundary_code, json_extract_scalar(x, '$.productCode') AS product,
+       CASE json_extract_scalar(x, '$.productCode') WHEN 'MR' THEN 'Measles-Rubella (MR)' WHEN 'IPV' THEN 'fIPV' ELSE json_extract_scalar(x, '$.productCode') END AS product_label, json_extract_scalar(x, '$.reasonNotAdministered') AS reason,
+       CASE json_extract_scalar(x, '$.deliveryMode') WHEN 'FIXED_POST' THEN 'Fixed post' WHEN 'HOUSE_TO_HOUSE' THEN 'House to house' WHEN 'TRANSIT_POST' THEN 'Transit post' ELSE json_extract_scalar(x, '$.deliveryMode') END AS delivery_mode, json_extract_scalar(x, '$.teamId') AS team_id,
+       CAST(substr(json_extract_scalar(x, '$.eventTime'), 1, 10) AS date) AS event_date,
+       CAST(json_extract_scalar(x, '$.latitude') AS double) AS latitude, CAST(json_extract_scalar(x, '$.longitude') AS double) AS longitude
+FROM b JOIN microplan.public.dim_district d ON d.boundary_code = json_extract_scalar(x, '$.boundaryHierarchyCode.district')

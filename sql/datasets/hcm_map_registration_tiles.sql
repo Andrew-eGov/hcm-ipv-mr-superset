@@ -1,0 +1,5 @@
+WITH b AS (SELECT x FROM TABLE(hcm.system.raw_query('default', 'household-index-v1', '{"size":0,"aggs":{"c":{"composite":{"size":65000,"sources":[{"code":{"terms":{"field":"Data.boundaryHierarchyCode.district"}}},{"outcome":{"terms":{"field":"Data.visitOutcome"}}},{"tile":{"geotile_grid":{"field":"Data.geoPoint","precision":12}}}]},"aggs":{"c":{"geo_centroid":{"field":"Data.geoPoint"}},"m":{"sum":{"field":"Data.memberCount"}}}}}}')) CROSS JOIN UNNEST(CAST(json_extract(result, '$.aggregations.c.buckets') AS array(json))) AS t(x))
+SELECT d.region, d.district, d.boundary_code, 'House to house' AS delivery_mode, json_extract_scalar(x, '$.key.outcome') AS visit_outcome,
+       CAST(json_extract_scalar(x, '$.c.location.lat') AS double) AS latitude, CAST(json_extract_scalar(x, '$.c.location.lon') AS double) AS longitude,
+       CAST(json_extract_scalar(x, '$.doc_count') AS bigint) AS households, CAST(json_extract_scalar(x, '$.m.value') AS double) AS members
+FROM b JOIN microplan.public.dim_district d ON d.boundary_code = json_extract_scalar(x, '$.key.code')

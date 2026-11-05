@@ -1,0 +1,4 @@
+WITH b AS (SELECT x FROM TABLE(hcm.system.raw_query('default', 'project-task-index-v1', '{"size":0,"aggs":{"c":{"composite":{"size":65000,"sources":[{"user":{"terms":{"field":"Data.createdBy"}}},{"day":{"date_histogram":{"field":"Data.eventTime","calendar_interval":"day","format":"yyyy-MM-dd"}}}]}}},"query":{"term":{"Data.administrationStatus":"ADMINISTRATION_SUCCESS"}}}')) CROSS JOIN UNNEST(CAST(json_extract(result, '$.aggregations.c.buckets') AS array(json))) AS t(x))
+SELECT u.region, u.district, json_extract_scalar(x, '$.key.user') AS user_id, u.role_group, CAST(json_extract_scalar(x, '$.key.day') AS date) AS event_date,
+       CAST(json_extract_scalar(x, '$.doc_count') AS bigint) AS doses_recorded
+FROM b JOIN microplan.public.dim_user u ON u.user_id = json_extract_scalar(x, '$.key.user')

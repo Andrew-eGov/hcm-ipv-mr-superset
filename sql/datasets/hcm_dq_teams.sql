@@ -1,0 +1,4 @@
+WITH b AS (SELECT x FROM TABLE(hcm.system.raw_query('default', 'project-task-index-v1', '{"size":0,"aggs":{"c":{"composite":{"size":65000,"sources":[{"team":{"terms":{"field":"Data.teamId"}}},{"day":{"date_histogram":{"field":"Data.eventTime","calendar_interval":"day","format":"yyyy-MM-dd"}}},{"code":{"terms":{"field":"Data.boundaryHierarchyCode.district"}}},{"type":{"terms":{"field":"Data.teamType"}}}]}}},"query":{"term":{"Data.administrationStatus":"ADMINISTRATION_SUCCESS"}}}')) CROSS JOIN UNNEST(CAST(json_extract(result, '$.aggregations.c.buckets') AS array(json))) AS t(x))
+SELECT d.region, d.district, d.boundary_code, json_extract_scalar(x, '$.key.team') AS team_id, json_extract_scalar(x, '$.key.type') AS team_type,
+       CAST(json_extract_scalar(x, '$.key.day') AS date) AS event_date, CAST(json_extract_scalar(x, '$.doc_count') AS bigint) AS doses_recorded
+FROM b JOIN microplan.public.dim_district d ON d.boundary_code = json_extract_scalar(x, '$.key.code')

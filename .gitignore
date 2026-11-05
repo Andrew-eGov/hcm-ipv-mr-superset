@@ -1,0 +1,9 @@
+tools/.venv/
+__pycache__/
+*.pyc
+.env
+data/mock_progress.log
+# Microplan workbooks contain user lists (PII) - never commit
+*.xlsx
+*.xls
+.DS_Store

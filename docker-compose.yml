@@ -1,0 +1,72 @@
+# HCM IPV+MR campaign analytics stack
+#   Elasticsearch  - stand-in for the HCM ES cluster (mock indexes)
+#   Postgres       - microplan targets, users, district shapes  (+ Superset metadata)
+#   Trino          - live SQL over ES + Postgres (joins), queried by Superset
+#   Superset 6.1   - dashboards
+# To go live: point trino/catalog/hcm.properties at the real HCM ES cluster.
+name: hcm-superset
+
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.19.21
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms1g -Xmx1g
+    mem_limit: 2g
+    ports: ["9200:9200"]
+    volumes: [esdata:/usr/share/elasticsearch/data]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s localhost:9200/_cluster/health | grep -qv red"]
+      interval: 10s
+      retries: 30
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: hcm
+      POSTGRES_PASSWORD: hcm
+      POSTGRES_DB: microplan
+    ports: ["5433:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./sql/00_init.sql:/docker-entrypoint-initdb.d/00_init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hcm"]
+      interval: 5s
+      retries: 30
+
+  redis:
+    image: redis:7.4
+
+  trino:
+    image: trinodb/trino:484
+    mem_limit: 3500m   # JVM takes 80% of this; unbounded it sizes to the whole VM and gets OOM-killed
+    restart: unless-stopped
+    ports: ["8080:8080"]
+    volumes:
+      - ./trino/catalog:/etc/trino/catalog:ro
+    depends_on:
+      elasticsearch: {condition: service_healthy}
+      postgres: {condition: service_healthy}
+
+  superset:
+    build: ./superset
+    environment:
+      SUPERSET_CONFIG_PATH: /app/superset_config_local.py
+      SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY:-change-me-hcm-namibia-local-only}
+    ports: ["8088:8088"]
+    volumes:
+      - ./superset/superset_config.py:/app/superset_config_local.py:ro
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_started}
+    command: >
+      bash -c "superset db upgrade &&
+               superset fab create-admin --username admin --firstname HCM --lastname Admin --email admin@example.org --password admin || true;
+               superset init &&
+               gunicorn -w 4 -k gthread --threads 8 --timeout 300 -b 0.0.0.0:8088 'superset.app:create_app()'"
+
+volumes:
+  esdata:
+  pgdata:

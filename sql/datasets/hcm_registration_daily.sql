@@ -1,0 +1,6 @@
+WITH b AS (SELECT x FROM TABLE(hcm.system.raw_query('default', 'individual-index-v1', '{"size":0,"aggs":{"c":{"composite":{"size":65000,"sources":[{"day":{"date_histogram":{"field":"Data.eventTime","calendar_interval":"day","format":"yyyy-MM-dd"}}},{"code":{"terms":{"field":"Data.boundaryHierarchyCode.district"}}},{"mode":{"terms":{"field":"Data.deliveryMode"}}},{"gender":{"terms":{"field":"Data.gender","missing_bucket":true}}},{"mr":{"terms":{"field":"Data.eligibleMR"}}},{"ipv":{"terms":{"field":"Data.eligibleIPV"}}}]}}}}')) CROSS JOIN UNNEST(CAST(json_extract(result, '$.aggregations.c.buckets') AS array(json))) AS t(x))
+SELECT CAST(json_extract_scalar(x, '$.key.day') AS date) AS event_date, d.region, d.district, d.boundary_code,
+       CASE json_extract_scalar(x, '$.key.mode') WHEN 'FIXED_POST' THEN 'Fixed post' WHEN 'HOUSE_TO_HOUSE' THEN 'House to house' WHEN 'TRANSIT_POST' THEN 'Transit post' ELSE json_extract_scalar(x, '$.key.mode') END AS delivery_mode, coalesce(json_extract_scalar(x, '$.key.gender'), 'NOT RECORDED') AS gender,
+       json_extract_scalar(x, '$.key.mr') = 'true' AS eligible_mr, json_extract_scalar(x, '$.key.ipv') = 'true' AS eligible_ipv,
+       CAST(json_extract_scalar(x, '$.doc_count') AS bigint) AS registrations
+FROM b JOIN microplan.public.dim_district d ON d.boundary_code = json_extract_scalar(x, '$.key.code')
