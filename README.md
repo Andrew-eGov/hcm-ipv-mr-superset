@@ -4,6 +4,8 @@ This is a live Superset 6.1 dashboard for the Namibia integrated campaign, `NAM-
 
 **Open:** http://localhost:8088/superset/dashboard/hcm-ipv-mr-namibia/ (local login `admin` / `admin`)
 
+**Static review snapshot:** https://hcm-ipv-mr-review.vercel.app. This is a standalone page (`static/`) with the same tabs, filters and maps. Its data is a frozen export of the mock data, so it is not live. To refresh it, run `tools/export_static.py`, then `npx vercel deploy --prod` from `static/`.
+
 ## Architecture
 
 ```

@@ -1,0 +1,556 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IPV-MR Campaign Dashboard</title>
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface: #fcfcfb; --card: #ffffff;
+  --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,0.10);
+  --brand: #0b4b66; --accent: #f47738;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4;
+  --good: #0ca30c; --warning: #fab219; --serious: #ec835a; --critical: #d03b3b;
+  --seq1: #cde2fb; --seq2: #86b6ef; --seq3: #5598e7; --seq4: #2a78d6; --seq5: #184f95;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --card: #1a1a19;
+    --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+    --brand: #8cc7e3; --accent: #f4874f;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181;
+    --seq1: #104281; --seq2: #1c5cab; --seq3: #2a78d6; --seq4: #5598e7; --seq5: #9ec5f4;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19; --card: #1a1a19;
+  --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+  --brand: #8cc7e3; --accent: #f4874f;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181;
+  --seq1: #104281; --seq2: #1c5cab; --seq3: #2a78d6; --seq4: #5598e7; --seq5: #9ec5f4;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { background: var(--card); border-bottom: 1px solid var(--border); padding: 14px 24px 0; position: sticky; top: 0; z-index: 1000; }
+.top { display: flex; gap: 16px; align-items: baseline; flex-wrap: wrap; }
+h1 { margin: 0; font-size: 22px; color: var(--brand); font-weight: 700; letter-spacing: -0.01em; }
+.sub { color: var(--ink-2); font-size: 13px; }
+.badge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: color-mix(in srgb, var(--warning) 25%, transparent); color: var(--ink); border: 1px solid color-mix(in srgb, var(--warning) 60%, transparent); }
+.filters { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; margin: 12px 0 10px; }
+.filters label { display: flex; flex-direction: column; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; gap: 3px; }
+select, button.reset { font: inherit; font-size: 13px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--ink); min-width: 150px; }
+button.reset { min-width: 0; cursor: pointer; color: var(--ink-2); }
+nav.tabs { display: flex; gap: 4px; overflow-x: auto; }
+nav.tabs button { font: inherit; border: 0; background: none; padding: 10px 16px; color: var(--ink-2); cursor: pointer; border-bottom: 3px solid transparent; white-space: nowrap; }
+nav.tabs button.on { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+main { padding: 18px 24px 40px; max-width: 1600px; margin: 0 auto; }
+section.tab { display: none; } section.tab.on { display: block; }
+.grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 14px; margin-bottom: 14px; }
+.c3 { grid-column: span 3; } .c4 { grid-column: span 4; } .c6 { grid-column: span 6; } .c12 { grid-column: span 12; } .c2 { grid-column: span 2; }
+@media (max-width: 1100px) { .c2 { grid-column: span 4; } .c3 { grid-column: span 6; } .c4, .c6 { grid-column: span 12; } }
+@media (max-width: 640px) { main, header { padding-left: 16px; padding-right: 16px; } .c2, .c3 { grid-column: span 6; } }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; min-width: 0; }
+.card h3 { margin: 0 0 2px; font-size: 14px; font-weight: 600; }
+.card .note { margin: 0 0 8px; font-size: 12px; color: var(--muted); }
+.strip { border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent); background: var(--card); border-radius: 10px; display: grid; grid-template-columns: 220px repeat(3, 1fr); align-items: center; margin-bottom: 14px; }
+.strip .lbl { padding: 18px 20px; font-weight: 700; font-size: 17px; background: color-mix(in srgb, var(--accent) 6%, var(--card)); border-radius: 10px 0 0 10px; height: 100%; display: flex; align-items: center; gap: 8px; }
+.strip .lbl small { display: block; font-weight: 400; font-size: 12px; color: var(--muted); }
+.strip .m { padding: 12px 20px; }
+@media (max-width: 640px) { .strip { grid-template-columns: 1fr 1fr 1fr; } .strip .lbl { grid-column: span 3; border-radius: 10px 10px 0 0; } }
+.k .v { font-size: 26px; font-weight: 650; color: var(--brand); line-height: 1.15; }
+.k .t { font-size: 12px; color: var(--ink-2); }
+.k .st { font-size: 11px; font-weight: 600; margin-top: 4px; display: inline-flex; gap: 4px; align-items: center; }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.bar { height: 8px; background: var(--grid); border-radius: 4px; margin-top: 6px; overflow: hidden; }
+.bar > i { display: block; height: 100%; border-radius: 4px; }
+.chart { height: 320px; } .chart.tall { height: 420px; }
+.map { height: 430px; border-radius: 8px; z-index: 0; }
+.legend { display: flex; gap: 10px; flex-wrap: wrap; font-size: 12px; color: var(--ink-2); margin-top: 8px; align-items: center; }
+.legend .sw { width: 22px; height: 10px; display: inline-block; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
+table { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+th, td { text-align: right; padding: 6px 8px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+th:first-child, td:first-child, th.l, td.l { text-align: left; }
+th { color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .03em; position: sticky; top: 0; background: var(--card); }
+.tbl { max-height: 420px; overflow: auto; }
+.pill { font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 999px; display: inline-flex; gap: 4px; align-items: center; }
+.leaflet-container { background: var(--surface); font: inherit; }
+.mc { background: color-mix(in srgb, var(--s2) 85%, transparent); border: 2px solid var(--card); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 11px; }
+footer { color: var(--muted); font-size: 12px; padding: 0 24px 30px; max-width: 1600px; margin: 0 auto; }
+</style>
+</head>
+<body>
+<header>
+  <div class="top">
+    <h1>IPV + MR Integrated Campaign · National Dashboard</h1>
+    <span class="sub">Namibia · NAM-09-01-IPV-MR_NID · Round 1 · 9-19 Nov 2026</span>
+    <span class="badge" title="Static snapshot exported from the Superset build; all field records are synthetic">REVIEW SNAPSHOT · SYNTHETIC DATA</span>
+  </div>
+  <div class="filters">
+    <label>Region<select id="fRegion"></select></label>
+    <label>District<select id="fDistrict"></select></label>
+    <label>Vaccine<select id="fVaccine"><option value="">MR + fIPV</option><option value="MR">Measles-Rubella (MR)</option><option value="IPV">fIPV</option></select></label>
+    <label>Delivery mode<select id="fMode"><option value="">All modes</option><option>Fixed post</option><option>House to house</option><option>Transit post</option></select></label>
+    <button class="reset" id="reset">Reset</button>
+  </div>
+  <nav class="tabs" id="tabs"></nav>
+</header>
+<main id="main"></main>
+<footer id="foot"></footer>
+
+<script>
+const TABS = ["Overview", "Coverage", "Inventory", "Data Quality", "Supervision", "Complaints"];
+const MODES = ["Fixed post", "House to house", "Transit post"];
+const PNAME = { MR: "Measles-Rubella (MR)", IPV: "fIPV", ADS_05: "AD syringe 0.5 mL", ADS_01: "AD syringe 0.1 mL", RUP_5: "Reconstitution syringe" };
+let D, F = { region: "", district: "", vaccine: "", mode: "" }, active = "Overview";
+const charts = {}, maps = {};
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const fmt = n => n == null || isNaN(n) ? "–" : Math.round(n).toLocaleString("en-US");
+const pct = (n, d = 0) => n == null || !isFinite(n) ? "–" : (n * 100).toFixed(d) + "%";
+const sum = (a, f) => a.reduce((s, x) => s + (+f(x) || 0), 0);
+const by = (a, k) => a.reduce((m, x) => ((m[k(x)] = m[k(x)] || []).push(x), m), {});
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+// ---------------------------------------------------------------- selection helpers
+function codes() { return new Set(D.districts.filter(d => (!F.region || d.region === F.region) && (!F.district || d.district === F.district)).map(d => d.code)); }
+function distName(code) { return D.dmap[code]?.district; }
+const prods = () => F.vaccine ? [F.vaccine] : ["MR", "IPV"];
+function daily(extra = () => true) {
+  const C = codes();
+  return D.daily.filter(r => C.has(r.code) && (!F.mode || r.mode === F.mode) && extra(r));
+}
+function doses(prod, cs = codes()) { return sum(D.daily.filter(r => cs.has(r.code) && r.product === prod && (!F.mode || r.mode === F.mode)), r => r.doses); }
+function target(prod, cs = codes()) { return sum(D.districts.filter(d => cs.has(d.code)), d => prod === "MR" ? d.mr_target : d.ipv_target); }
+function syncG(g) { const rs = D.sync.filter(r => r.g === g && (!F.region || r.region === F.region) && (!F.district || r.district === F.district)); return { total: sum(rs, r => r.total), synced: sum(rs, r => r.synced) }; }
+
+// ---------------------------------------------------------------- UI pieces
+function strip(title, sub, g) {
+  const s = syncG(g);
+  return `<div class="strip"><div class="lbl"><span>⟲</span><div>${title}<small>${sub}</small></div></div>
+  <div class="m k"><div class="t">Total</div><div class="v">${fmt(s.total)}</div></div>
+  <div class="m k"><div class="t">Synced at least once</div><div class="v">${fmt(s.synced)}</div></div>
+  <div class="m k"><div class="t">Sync rate</div><div class="v">${pct(s.synced / s.total, 1)}</div></div></div>`;
+}
+function status(v, good, warn, higherBetter = true) {
+  if (v == null || !isFinite(v)) return "";
+  const ok = higherBetter ? v >= good : v <= good, mid = higherBetter ? v >= warn : v <= warn;
+  const [c, l, i] = ok ? ["--good", "On track", "✓"] : mid ? ["--warning", "Watch", "!"] : ["--critical", "At risk", "✕"];
+  return `<span class="st"><span class="dot" style="background:var(${c})"></span>${i} ${l}</span>`;
+}
+function kpi(cls, title, value, extra = "", barFrac = null, barColor = "--s1") {
+  const bar = barFrac == null ? "" : `<div class="bar"><i style="width:${Math.min(100, barFrac * 100)}%;background:var(${barColor})"></i></div>`;
+  return `<div class="card k ${cls}"><div class="t">${title}</div><div class="v">${value}</div>${bar}${extra}</div>`;
+}
+function card(cls, id, title, note = "", kind = "chart") {
+  const inner = kind === "map" ? `<div class="map" id="${id}"></div><div class="legend" id="${id}-lg"></div>`
+              : kind === "table" ? `<div class="tbl" id="${id}"></div>` : `<div class="chart ${kind === "tall" ? "tall" : ""}" id="${id}"></div>`;
+  return `<div class="card ${cls}"><h3>${title}</h3>${note ? `<p class="note">${note}</p>` : ""}${inner}</div>`;
+}
+function table(id, cols, rows) {
+  const el = document.getElementById(id); if (!el) return;
+  el.innerHTML = `<table><thead><tr>${cols.map(c => `<th class="${c.l ? "l" : ""}">${c.h}</th>`).join("")}</tr></thead><tbody>${
+    rows.map(r => `<tr>${cols.map(c => `<td class="${c.l ? "l" : ""}">${c.f ? c.f(r) : esc(r[c.k])}</td>`).join("")}</tr>`).join("") || `<tr><td colspan="${cols.length}" class="l">No rows for this selection</td></tr>`
+  }</tbody></table>`;
+}
+
+// ---------------------------------------------------------------- charts (ECharts)
+function base() {
+  return {
+    textStyle: { fontFamily: "system-ui, -apple-system, Segoe UI, sans-serif", color: css("--ink-2") },
+    grid: { left: 8, right: 16, top: 36, bottom: 8, containLabel: true },
+    legend: { top: 0, left: 0, icon: "roundRect", itemWidth: 12, itemHeight: 8, textStyle: { color: css("--ink-2") } },
+    tooltip: { trigger: "axis", axisPointer: { type: "shadow" }, backgroundColor: css("--card"), borderColor: css("--border"), textStyle: { color: css("--ink") } },
+  };
+}
+const axisCat = (data, rotate = 0) => ({ type: "category", data, axisLine: { lineStyle: { color: css("--axis") } }, axisTick: { show: false }, axisLabel: { color: css("--muted"), rotate, fontSize: 11, hideOverlap: false, interval: 0 } });
+const axisVal = (f = v => fmt(v)) => ({ type: "value", splitLine: { lineStyle: { color: css("--grid") } }, axisLabel: { color: css("--muted"), formatter: f } });
+const barS = (name, data, color, stack) => ({ name, type: "bar", data, stack, barMaxWidth: 26, itemStyle: { color: css(color), borderRadius: stack ? 0 : [4, 4, 0, 0], borderColor: css("--card"), borderWidth: stack ? 1 : 0 } });
+function draw(id, opt) {
+  const el = document.getElementById(id); if (!el) return;
+  charts[id]?.dispose();
+  charts[id] = echarts.init(el, null, { renderer: "svg" });
+  charts[id].setOption(Object.assign(base(), opt));
+}
+const pctTip = { valueFormatter: v => v == null ? "–" : (v * 100).toFixed(1) + "%" };
+
+// ---------------------------------------------------------------- maps (Leaflet)
+const NAM = [[-29.2, 11.6], [-16.9, 25.4]];
+function mapInit(id) {
+  maps[id]?.remove();
+  const m = L.map(id, { zoomSnap: 0.25, scrollWheelZoom: false, attributionControl: true });
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 14, attribution: "© OpenStreetMap contributors" }).addTo(m);
+  m.fitBounds(NAM);
+  maps[id] = m; return m;
+}
+function fitSel(m) {
+  const C = codes(); if (C.size === D.districts.length) return m.fitBounds(NAM);
+  const fs = D.geo.features.filter(f => C.has(f.properties.code));
+  if (fs.length) m.fitBounds(L.geoJSON({ type: "FeatureCollection", features: fs }).getBounds(), { padding: [10, 10] });
+}
+function choro(id, valueOf, label, f = v => v.toFixed(0), unit = "") {
+  const m = mapInit(id), C = codes();
+  const vals = D.geo.features.map(x => valueOf(x.properties.code)).filter(v => v != null && isFinite(v)).sort((a, b) => a - b);
+  const q = [0.2, 0.4, 0.6, 0.8].map(p => vals[Math.floor(p * (vals.length - 1))] ?? 0);
+  const ramp = ["--seq1", "--seq2", "--seq3", "--seq4", "--seq5"].map(css);
+  const col = v => v == null || !isFinite(v) ? css("--grid") : ramp[q.filter(t => v > t).length];
+  L.geoJSON(D.geo, {
+    style: ft => ({ fillColor: col(valueOf(ft.properties.code)), fillOpacity: C.has(ft.properties.code) ? 0.82 : 0.15, color: css("--card"), weight: 1.2 }),
+    onEachFeature: (ft, l) => l.bindTooltip(`<b>${esc(ft.properties.district)}</b> · ${esc(ft.properties.region)}<br>${label}: <b>${(v => v == null || !isFinite(v) ? "–" : f(v) + unit)(valueOf(ft.properties.code))}</b>`, { sticky: true }),
+  }).addTo(m);
+  fitSel(m);
+  const edges = [vals[0], ...q, vals[vals.length - 1]];
+  document.getElementById(id + "-lg").innerHTML = `<span>${label}</span>` + ramp.map((c, i) => `<span><span class="sw" style="background:${c}"></span>${f(edges[i] ?? 0)}–${f(edges[i + 1] ?? 0)}${unit}</span>`).join("");
+}
+function clusterMap(id, pts, w, color, title) {
+  const m = mapInit(id);
+  const g = L.markerClusterGroup({
+    maxClusterRadius: 50, showCoverageOnHover: false,
+    iconCreateFunction: c => {
+      const t = c.getAllChildMarkers().reduce((s, x) => s + (x.options.w || 1), 0);
+      const sz = 26 + Math.min(30, Math.log10(t + 1) * 7);
+      return L.divIcon({ html: `<div class="mc" style="width:${sz}px;height:${sz}px;background:${color}">${t >= 1000 ? (t / 1000).toFixed(t >= 10000 ? 0 : 1) + "k" : t}</div>`, className: "", iconSize: [sz, sz] });
+    },
+  });
+  pts.forEach(p => g.addLayer(L.circleMarker([p.lat, p.lon], { radius: 5, w: w(p), color: css("--card"), weight: 1, fillColor: color, fillOpacity: .9 }).bindTooltip(title(p))));
+  m.addLayer(g); fitSel(m);
+  document.getElementById(id + "-lg").innerHTML = `<span><span class="dot" style="background:${color}"></span> Cluster label = total ${w === one ? "events" : "doses"}; zoom in to split clusters</span>`;
+}
+const one = () => 1;
+function pointMap(id, pts, catOf, cats, titleOf, radius = 4) {
+  const m = mapInit(id), colors = ["--s1", "--s2", "--s3", "--s4", "--s5", "--muted"].map(css);
+  const cmap = Object.fromEntries(cats.map((c, i) => [c, colors[Math.min(i, colors.length - 1)]]));
+  const C = codes();
+  pts.filter(p => C.has(p.code)).forEach(p => L.circleMarker([p.lat, p.lon], { radius, color: css("--card"), weight: .6, fillColor: cmap[catOf(p)] || css("--muted"), fillOpacity: .85 }).bindTooltip(titleOf(p)).addTo(m));
+  fitSel(m);
+  document.getElementById(id + "-lg").innerHTML = cats.map(c => `<span><span class="dot" style="background:${cmap[c]}"></span> ${esc(c)}</span>`).join("");
+}
+
+// ---------------------------------------------------------------- tab renderers
+function cov(prod, cs = codes()) { return doses(prod, cs) / target(prod, cs); }
+function vsPlan(cs = codes()) {
+  const de = D.coverage[0].days_elapsed;
+  return sum(prods(), p => doses(p, cs)) / (sum(prods(), p => target(p, cs)) * de / 11);
+}
+function wastage(prod, cs = codes()) { const rs = D.wastage.filter(r => cs.has(r.code) && r.product === prod); return sum(rs, r => r.doses_wasted) / sum(rs, r => r.doses_opened); }
+function dqRate(cs = codes()) { const rs = D.dq.filter(r => cs.has(r.code)); return sum(rs, r => r.missing_gps + r.low_accuracy + r.outside_district + r.duplicates) / sum(rs, r => r.records); }
+function complaints(cs = codes()) { return D.complaints.filter(r => cs.has(r.code)); }
+function storesAtRisk(cs = codes()) { return new Set(D.stock.filter(r => r.level === 3 && cs.has(r.code) && /risk|Insufficient/.test(r.stock_status)).map(r => r.name)).size; }
+
+function covByDistrictChart(id) {
+  const C = codes(), ds = D.districts.filter(d => C.has(d.code));
+  draw(id, { legend: base().legend, tooltip: Object.assign(base().tooltip, pctTip), xAxis: axisCat(ds.map(d => d.district), 45), yAxis: axisVal(v => (v * 100) + "%"),
+    series: prods().map((p, i) => barS(PNAME[p], ds.map(d => +(doses(p, new Set([d.code])) / target(p, new Set([d.code]))).toFixed(4)), i ? "--s2" : "--s1")),
+    graphic: [] });
+}
+function plannedChart(id) {
+  const C = codes(), de = D.coverage[0].days_elapsed;
+  const days = D.planned.map(p => p.d);
+  const series = [];
+  prods().forEach((p, i) => {
+    const t = target(p, C); let cum = 0;
+    const act = days.map((d, k) => { if (k >= de) return null; cum += sum(D.daily.filter(r => C.has(r.code) && r.product === p && r.d === d && (!F.mode || r.mode === F.mode)), r => r.doses); return +(cum / t).toFixed(4); });
+    series.push({ name: `${PNAME[p]} actual`, type: "line", data: act, symbolSize: 8, lineStyle: { width: 2 }, itemStyle: { color: css(i ? "--s2" : "--s1") } });
+  });
+  series.push({ name: "Planned", type: "line", data: D.planned.map(p => p.planned_cum_pct / 100), symbol: "none", lineStyle: { width: 2, type: "dashed", color: css("--muted") }, itemStyle: { color: css("--muted") } });
+  draw(id, { tooltip: Object.assign({ trigger: "axis", axisPointer: { type: "line" } }, pctTip), xAxis: axisCat(days.map(d => d.slice(8) + " Nov")), yAxis: axisVal(v => (v * 100) + "%"), series });
+}
+
+const R = {
+  Overview() {
+    const C = codes(), cmp = complaints(C), ds = syncG("Vaccinators downsynced");
+    const both = D.coadmin.filter(r => C.has(r.code));
+    return [
+      strip("Data Sync", "Frontline workers (vaccinators + registrars)", "Frontline workers"),
+      `<div class="grid">
+        ${kpi("c3", "MR coverage (target: children 9 m–<10 y)", pct(cov("MR"), 1), `<div class="t">${fmt(doses("MR"))} of ${fmt(target("MR"))}</div>`, cov("MR"), "--s1")}
+        ${kpi("c3", "fIPV coverage (target: 95% of under-5)", pct(cov("IPV"), 1), `<div class="t">${fmt(doses("IPV"))} of ${fmt(target("IPV"))}</div>`, cov("IPV"), "--s2")}
+        ${kpi("c2", "Doses vs plan to date", pct(vsPlan()), status(vsPlan(), .9, .75))}
+        ${kpi("c2", "Children 9–59 m given both", pct(sum(both, r => r.both) / sum(both, r => r.kids)), status(sum(both, r => r.both) / sum(both, r => r.kids), .95, .85))}
+        ${kpi("c2", "Total doses administered", fmt(sum(prods(), p => doses(p))))}
+      </div>
+      <div class="grid">
+        ${kpi("c2", "MR wastage (plan 5%)", pct(wastage("MR", C), 1), status(wastage("MR", C), .05, .08, false))}
+        ${kpi("c2", "fIPV wastage (plan 5%)", pct(wastage("IPV", C), 1), status(wastage("IPV", C), .05, .08, false))}
+        ${kpi("c2", "District stores short for remaining days", fmt(storesAtRisk(C)))}
+        ${kpi("c2", "Complaints resolved", pct(sum(cmp, r => r.resolved) / sum(cmp, r => r.n)), status(sum(cmp, r => r.resolved) / sum(cmp, r => r.n), .8, .6))}
+        ${kpi("c2", "Vaccinators downsynced", pct(ds.synced / ds.total), status(ds.synced / ds.total, .9, .75))}
+        ${kpi("c2", "Records with GPS / duplicate issues", pct(dqRate(C), 1), status(dqRate(C), .03, .06, false))}
+      </div>
+      <div class="grid">
+        ${card("c6", "ov-map-cov", `${F.vaccine ? PNAME[F.vaccine] : "MR"} coverage by district`, "Cumulative to date; click-free tooltips on hover", "map")}
+        ${card("c6", "ov-map-ev", "Vaccination events (clustered)", "Every geotagged delivery, clustered; numbers are doses", "map")}
+      </div>
+      <div class="grid">
+        ${card("c6", "ov-region", "Coverage by region")}
+        ${card("c6", "ov-plan", "Planned vs actual (cumulative % of target)")}
+      </div>`,
+      () => {
+        const p = F.vaccine || "MR";
+        choro("ov-map-cov", c => doses(p, new Set([c])) / target(p, new Set([c])) * 100, "Coverage", v => v.toFixed(0), "%");
+        evMap("ov-map-ev");
+        const regs = [...new Set(D.districts.filter(d => C.has(d.code)).map(d => d.region))];
+        draw("ov-region", { tooltip: Object.assign(base().tooltip, pctTip), xAxis: axisCat(regs, 30), yAxis: axisVal(v => v * 100 + "%"),
+          series: prods().map((p, i) => barS(PNAME[p], regs.map(r => { const cs = new Set(D.districts.filter(d => d.region === r && C.has(d.code)).map(d => d.code)); return +(doses(p, cs) / target(p, cs)).toFixed(4); }), i ? "--s2" : "--s1")) });
+        plannedChart("ov-plan");
+      }];
+  },
+  Coverage() {
+    return [
+      strip("Data Sync", "Frontline workers", "Frontline workers"),
+      `<div class="grid">${card("c12", "cv-dist", "Coverage % by district and vaccine", "Cumulative doses ÷ microplan target", "tall")}</div>
+      <div class="grid">
+        ${card("c6", "cv-map-plan", "Progress vs plan to date, by district", "Doses ÷ (target × days elapsed / 11)", "map")}
+        ${card("c6", "cv-map-ev", "Vaccination events (clustered)", "Filter by vaccine and delivery mode above", "map")}
+      </div>
+      <div class="grid">
+        ${card("c6", "cv-plan", "Planned vs actual (cumulative)")}
+        ${card("c6", "cv-mode", "Daily doses by delivery mode")}
+      </div>
+      <div class="grid">
+        ${card("c4", "cv-age", "Doses by age group")}
+        ${card("c4", "cv-reason", "Missed opportunities by reason", "Children eligible but not vaccinated")}
+        ${card("c4", "cv-both", "Children 9–59 m receiving both vaccines")}
+      </div>
+      <div class="grid">
+        ${card("c6", "cv-map-missed", "Missed / refused children", "Latest 4,000 events with GPS", "map")}
+        ${card("c6", "cv-tbl", "Coverage summary by district", "", "table")}
+      </div>`,
+      () => {
+        const C = codes();
+        covByDistrictChart("cv-dist");
+        choro("cv-map-plan", c => vsPlan(new Set([c])) * 100, "vs plan", v => v.toFixed(0), "%");
+        evMap("cv-map-ev");
+        plannedChart("cv-plan");
+        const days = D.planned.map(p => p.d).slice(0, D.coverage[0].days_elapsed);
+        const rs = daily(r => prods().includes(r.product));
+        draw("cv-mode", { xAxis: axisCat(days.map(d => d.slice(8) + " Nov")), yAxis: axisVal(),
+          series: MODES.filter(m => !F.mode || m === F.mode).map((m, i) => barS(m, days.map(d => sum(rs.filter(r => r.d === d && r.mode === m), r => r.doses)), ["--s1", "--s2", "--s3"][MODES.indexOf(m)], "a")) });
+        const groups = ["1. 4-8 months (fIPV only)", "2. 9-59 months (MR + fIPV)", "3. 5-9 years (MR only)"];
+        draw("cv-age", { xAxis: axisCat(["4–8 m", "9–59 m", "5–9 y"]), yAxis: axisVal(),
+          series: prods().map((p, i) => barS(PNAME[p], groups.map(g => sum(D.age.filter(r => C.has(r.code) && r.product === p && r.age_group === g), r => r.doses)), i ? "--s2" : "--s1")) });
+        const miss = daily(r => r.status !== "ADMINISTRATION_SUCCESS" && prods().includes(r.product));
+        const reasons = Object.entries(by(miss, r => r.reason)).map(([k, v]) => [k, sum(v, r => r.n)]).sort((a, b) => b[1] - a[1]);
+        draw("cv-reason", { tooltip: base().tooltip, grid: { left: 8, right: 16, top: 8, bottom: 8, containLabel: true }, legend: { show: false },
+          yAxis: Object.assign(axisCat(reasons.map(r => r[0].replace(/_/g, " ").toLowerCase())), { inverse: true }), xAxis: axisVal(),
+          series: [Object.assign(barS("Children", reasons.map(r => r[1]), "--s1"), { itemStyle: { color: css("--s1"), borderRadius: [0, 4, 4, 0] } })] });
+        const ds = D.districts.filter(d => C.has(d.code)), cb = Object.fromEntries(D.coadmin.map(r => [r.code, r]));
+        draw("cv-both", { tooltip: Object.assign(base().tooltip, pctTip), legend: { show: false }, xAxis: axisCat(ds.map(d => d.district), 60), yAxis: Object.assign(axisVal(v => v * 100 + "%"), { min: .8, max: 1 }),
+          series: [barS("Both vaccines", ds.map(d => +(cb[d.code].both / cb[d.code].kids).toFixed(4)), "--s3")] });
+        const reasonsList = [...new Set(D.missed.map(p => p.reason))];
+        pointMap("cv-map-missed", D.missed.filter(p => prods().includes(p.product)), p => p.reason, reasonsList, p => `${esc(distName(p.code))} · ${PNAME[p.product]}<br>${esc(p.reason)}`);
+        table("cv-tbl", [{ h: "District", k: "district", l: 1 }, { h: "Vaccine", k: "v", l: 1 }, { h: "Target", f: r => fmt(r.t) }, { h: "Given", f: r => fmt(r.g) }, { h: "Coverage", f: r => pct(r.g / r.t, 1) }, { h: "vs plan", f: r => pct(r.g / (r.t * D.coverage[0].days_elapsed / 11)) + " " + statusDot(r.g / (r.t * D.coverage[0].days_elapsed / 11)) }],
+          ds.flatMap(d => prods().map(p => ({ district: d.district, v: PNAME[p], t: target(p, new Set([d.code])), g: doses(p, new Set([d.code])) }))));
+      }];
+  },
+  Inventory() {
+    const C = codes(), st = D.stock.filter(r => r.level === 3 && C.has(r.code));
+    const disc = D.discrepancy.filter(r => (!F.region || r.region === F.region) && (!F.district || r.district === F.district));
+    return [
+      strip("Data Sync", "Warehouses with at least one stock transaction", "Warehouses"),
+      `<div class="grid">
+        ${kpi("c3", "MR vials in hand (district stores)", fmt(sum(st.filter(r => r.product === "MR"), r => r.stock_in_hand)))}
+        ${kpi("c3", "fIPV vials in hand (district stores)", fmt(sum(st.filter(r => r.product === "IPV"), r => r.stock_in_hand)))}
+        ${kpi("c3", "Units dispatched but not received", fmt(sum(disc, r => r.discrepancy)), `<div class="t">${disc.length} waybills with a discrepancy</div>`)}
+        ${kpi("c3", "District stores short for remaining days", fmt(storesAtRisk(C)))}
+      </div>
+      <div class="grid">
+        ${card("c6", "in-days", "Days of stock left by district store", "Stock in hand ÷ average daily issue to teams (last 3 days)")}
+        ${card("c6", "in-waste", "Wastage % by district (plan 5%)", "Doses in opened vials − doses administered")}
+      </div>
+      <div class="grid">
+        ${card("c6", "in-map-st", "Stores by MR stock status", "National, regional and district stores (locations approximate)", "map")}
+        ${card("c6", "in-map-w", "MR wastage % by district", "", "map")}
+      </div>
+      <div class="grid">
+        ${card("c6", "in-flow", "Stock flow, vials (" + (F.vaccine ? PNAME[F.vaccine] : "MR") + ")", "", "tall")}
+        ${card("c6", "in-disc", "Stock discrepancy report", "Dispatched vs received per waybill", "table")}
+      </div>
+      <div class="grid">${card("c12", "in-pos", "Stock position by district store", "", "table")}</div>`,
+      () => {
+        const ds = D.districts.filter(d => C.has(d.code)), s = Object.fromEntries(st.map(r => [r.code + r.product, r]));
+        draw("in-days", { tooltip: Object.assign(base().tooltip, { valueFormatter: v => v == null ? "–" : v.toFixed(1) + " days" }), xAxis: axisCat(ds.map(d => d.district), 60), yAxis: axisVal(v => v),
+          series: prods().map((p, i) => Object.assign(barS(PNAME[p], ds.map(d => s[d.code + p]?.days_of_stock != null ? +s[d.code + p].days_of_stock.toFixed(1) : null), i ? "--s2" : "--s1"), i ? {} : { markLine: { silent: true, symbol: "none", lineStyle: { color: css("--critical"), type: "dashed" }, label: { position: "insideEndTop", formatter: "Days remaining: " + (11 - D.coverage[0].days_elapsed), color: css("--ink-2") }, data: [{ yAxis: 11 - D.coverage[0].days_elapsed }] } })) });
+        draw("in-waste", { tooltip: Object.assign(base().tooltip, pctTip), xAxis: axisCat(ds.map(d => d.district), 60), yAxis: axisVal(v => (v * 100).toFixed(0) + "%"),
+          series: prods().map((p, i) => Object.assign(barS(PNAME[p], ds.map(d => +wastage(p, new Set([d.code])).toFixed(4)), i ? "--s2" : "--s1"), i ? {} : { markLine: { silent: true, symbol: "none", lineStyle: { color: css("--muted"), type: "dashed" }, label: { position: "insideEndTop", formatter: "Plan 5%", color: css("--ink-2") }, data: [{ yAxis: .05 }] } })) });
+        // store status map + arcs
+        const m = mapInit("in-map-st"), prod = F.vaccine || "MR";
+        const SC = { "Sufficient": "--good", "Insufficient for remaining days": "--warning", "Stock-out risk": "--critical", "Intermediate store": "--s1", "No consumption": "--muted" };
+        D.arcs.filter(a => a.product === prod && (!F.region || a.region === F.region) && (!F.district || a.district === F.district))
+          .forEach(a => L.polyline([[a.source_lat, a.source_lon], [a.target_lat, a.target_lon]], { color: css("--s1"), weight: 1 + Math.log10(a.qty + 1) / 2, opacity: .45 }).addTo(m));
+        D.stock.filter(r => r.product === prod && (r.level < 3 || C.has(r.code))).forEach(r =>
+          L.circleMarker([r.lat, r.lon], { radius: r.level === 1 ? 11 : r.level === 2 ? 8 : 6, color: css("--card"), weight: 1.5, fillColor: css(SC[r.stock_status]), fillOpacity: .95 })
+            .bindTooltip(`<b>${esc(r.name)}</b><br>${esc(r.stock_status)}<br>In hand: ${fmt(r.stock_in_hand)} vials${r.days_of_stock != null ? `<br>${r.days_of_stock.toFixed(1)} days of stock` : ""}`).addTo(m));
+        fitSel(m);
+        document.getElementById("in-map-st-lg").innerHTML = Object.entries(SC).slice(0, 4).map(([k, c]) => `<span><span class="dot" style="background:var(${c})"></span> ${k}</span>`).join("") + `<span>Lines = dispatches</span>`;
+        choro("in-map-w", c => wastage(F.vaccine || "MR", new Set([c])) * 100, "Wastage", v => v.toFixed(1), "%");
+        // sankey
+        const fl = D.flow.filter(r => r.product === prod && !(r.source.startsWith("3") && F.district && !r.source.includes(F.district)) && !(F.region && !(r.source + r.target).includes(F.region) && !r.source.startsWith("1")));
+        const nodes = [...new Set(fl.flatMap(r => [r.source, r.target]))].map(n => ({ name: n, itemStyle: { color: css(["--s1", "--s2", "--s3", "--s4"][+n[0] - 1]) } }));
+        draw("in-flow", { tooltip: { trigger: "item", backgroundColor: css("--card"), textStyle: { color: css("--ink") } }, legend: { show: false },
+          series: [{ type: "sankey", left: 4, right: 110, top: 8, bottom: 8, nodeGap: 4, emphasis: { focus: "adjacency" }, data: nodes, links: fl.map(r => ({ source: r.source, target: r.target, value: r.qty })),
+            label: { color: css("--ink-2"), fontSize: 10, formatter: p => p.name.slice(2) }, lineStyle: { color: "gradient", opacity: .35 } }] });
+        table("in-disc", [{ h: "Receiving store", k: "receiver", l: 1 }, { h: "From", k: "sender", l: 1 }, { h: "Product", f: r => PNAME[r.product] || esc(r.product), l: 1 }, { h: "Waybill", k: "waybill", l: 1 }, { h: "Sent", f: r => fmt(r.sent) }, { h: "Received", f: r => fmt(r.received) }, { h: "Delta", f: r => `<b style="color:var(--critical)">${fmt(r.discrepancy)}</b>` }],
+          disc.sort((a, b) => b.discrepancy - a.discrepancy));
+        table("in-pos", [{ h: "Store", k: "name", l: 1 }, { h: "Product", f: r => PNAME[r.product], l: 1 }, { h: "Status", f: r => `<span class="pill" style="background:color-mix(in srgb, var(${SC[r.stock_status]}) 22%, transparent)">${esc(r.stock_status)}</span>`, l: 1 },
+          { h: "Received", f: r => fmt(r.received) }, { h: "Issued (net)", f: r => fmt(r.dispatched - r.returned) }, { h: "In hand", f: r => fmt(r.stock_in_hand) }, { h: "Daily use", f: r => fmt(r.daily_use) }, { h: "Days left", f: r => r.days_of_stock?.toFixed(1) ?? "–" }],
+          st.filter(r => prods().includes(r.product)).sort((a, b) => (a.days_of_stock ?? 99) - (b.days_of_stock ?? 99)));
+      }];
+  },
+  "Data Quality"() {
+    const C = codes(), rs = D.dq.filter(r => C.has(r.code)), tot = k => sum(rs, r => r[k]);
+    return [
+      strip("Data Down Sync", "Vaccinators who downloaded household lists", "Vaccinators downsynced"),
+      `<div class="grid">
+        ${kpi("c2", "Records without GPS", fmt(tot("missing_gps")), `<div class="t">${pct(tot("missing_gps") / tot("records"), 1)} of records</div>`)}
+        ${kpi("c2", "GPS accuracy > 100 m", fmt(tot("low_accuracy")), `<div class="t">${pct(tot("low_accuracy") / tot("records"), 1)}</div>`)}
+        ${kpi("c2", "GPS outside assigned district", fmt(tot("outside_district")), `<div class="t">${pct(tot("outside_district") / tot("records"), 1)}</div>`)}
+        ${kpi("c2", "Duplicate doses (same child)", fmt(tot("duplicates")))}
+        ${kpi("c2", "Incomplete registrations", fmt(tot("incomplete")), `<div class="t">${pct(tot("incomplete") / tot("registrations"), 1)} of registrations</div>`)}
+        ${kpi("c2", "Recorded 20:00–06:00", fmt(tot("off_hours")))}
+      </div>
+      <div class="grid">
+        ${card("c6", "dq-map", "% of records with GPS or duplicate issues", "", "map")}
+        ${card("c6", "dq-map-pts", "Low-accuracy GPS points (> 100 m)", "Sample of 3,000 latest", "map")}
+      </div>
+      <div class="grid">${card("c12", "dq-tbl", "Data quality by district", "", "table")}</div>
+      <div class="grid">
+        ${card("c6", "dq-sync", "Frontline sync and downsync rate by district")}
+        ${card("c6", "dq-users", "Users recording > 120 doses in a day", "Check for batch entry or shared devices", "table")}
+      </div>`,
+      () => {
+        choro("dq-map", c => dqRate(new Set([c])) * 100, "Issue rate", v => v.toFixed(1), "%");
+        pointMap("dq-map-pts", D.gps_issues, () => "Accuracy > 100 m", ["Accuracy > 100 m"], p => `${esc(distName(p.code))}<br>±${fmt(p.acc)} m`, 3);
+        table("dq-tbl", [{ h: "District", f: r => esc(distName(r.code)), l: 1 }, { h: "Records", f: r => fmt(r.records) }, { h: "No GPS", f: r => pct(r.missing_gps / r.records, 1) }, { h: "Low accuracy", f: r => pct(r.low_accuracy / r.records, 1) },
+          { h: "Outside district", f: r => pct(r.outside_district / r.records, 1) }, { h: "Duplicates", f: r => fmt(r.duplicates) }, { h: "Incomplete reg.", f: r => pct(r.incomplete / r.registrations, 1) }, { h: "Off-hours", f: r => fmt(r.off_hours) }],
+          [...rs].sort((a, b) => b.outside_district / b.records - a.outside_district / a.records));
+        const ds = D.districts.filter(d => C.has(d.code));
+        const rate = (g, d) => { const r = D.sync.find(x => x.g === g && x.district === d); return r ? +(r.synced / r.total).toFixed(4) : null; };
+        draw("dq-sync", { tooltip: Object.assign(base().tooltip, pctTip), xAxis: axisCat(ds.map(d => d.district), 60), yAxis: Object.assign(axisVal(v => v * 100 + "%"), { max: 1 }),
+          series: [barS("Frontline sync", ds.map(d => rate("Frontline workers", d.district)), "--s1"), barS("Downsync", ds.map(d => rate("Vaccinators downsynced", d.district)), "--s3")] });
+        const dn = new Set(ds.map(d => d.district));
+        table("dq-users", [{ h: "District", k: "district", l: 1 }, { h: "User", k: "user_id", l: 1 }, { h: "Date", k: "d", l: 1 }, { h: "Doses", f: r => fmt(r.n) }],
+          D.dq_users.filter(r => dn.has(r.district)).sort((a, b) => b.n - a.n).slice(0, 200));
+      }];
+  },
+  Supervision() {
+    const C = codes();
+    return [
+      strip("Data Sync", "Team, district, regional and national supervisors", "Supervisors"),
+      `<div class="grid">
+        ${card("c6", "sv-level", "Checklist completion rate by supervisor level", "Submitted ÷ expected (team supervisors 2/day, others 1/day)")}
+        ${card("c6", "sv-find", "Checklist findings (% yes)", "", "tall")}
+      </div>
+      <div class="grid">
+        ${card("c6", "sv-map", "Checklist completion by district", "Team and district supervisors", "map")}
+        ${card("c6", "sv-pts", "Where checklists were submitted", "", "map")}
+      </div>
+      <div class="grid">${card("c12", "sv-daily", "Checklists submitted per day")}</div>`,
+      () => {
+        const cc = D.checklist_completion.filter(r => (!F.region || r.region === F.region) && (!F.district || r.district === F.district || r.district == null && !F.district));
+        const lv = ["1 Team supervisors", "2 District supervisors", "3 Regional supervisors", "4 National supervisors"];
+        const regs = [...new Set(D.districts.filter(d => C.has(d.code)).map(d => d.region))];
+        draw("sv-level", { tooltip: Object.assign(base().tooltip, pctTip), xAxis: axisCat(regs, 35), yAxis: axisVal(v => v * 100 + "%"),
+          series: lv.map((l, i) => barS(l.slice(2), regs.map(r => { const x = cc.filter(c => c.level === l && c.region === r); return sum(x, c => c.expected) ? +(sum(x, c => c.submitted) / sum(x, c => c.expected)).toFixed(4) : null; }), ["--s1", "--s2", "--s3", "--s4"][i])) });
+        const fq = Object.entries(by(D.checklist_findings.filter(r => C.has(r.code)), r => r.question)).map(([q, v]) => [q, sum(v, r => r.yes) / sum(v, r => r.n)]).sort((a, b) => a[1] - b[1]);
+        draw("sv-find", { tooltip: Object.assign(base().tooltip, pctTip), legend: { show: false }, grid: { left: 8, right: 30, top: 8, bottom: 8, containLabel: true },
+          yAxis: axisCat(fq.map(f => f[0])), xAxis: Object.assign(axisVal(v => v * 100 + "%"), { max: 1 }),
+          series: [{ type: "bar", data: fq.map(f => ({ value: +f[1].toFixed(4), itemStyle: { color: css(f[1] >= .9 ? "--good" : f[1] >= .8 ? "--warning" : "--critical"), borderRadius: [0, 4, 4, 0] } })), barMaxWidth: 18,
+            label: { show: true, position: "right", formatter: p => (p.value * 100).toFixed(0) + "%", color: css("--ink-2"), fontSize: 11 } }] });
+        const comp = Object.fromEntries(Object.entries(by(D.checklist_completion.filter(r => r.district && /Team|District/.test(r.level)), r => r.district)).map(([d, v]) => [d, sum(v, r => r.submitted) / sum(v, r => r.expected)]));
+        choro("sv-map", c => comp[distName(c)] * 100, "Completion", v => v.toFixed(0), "%");
+        const roles = ["TEAM_SUPERVISOR", "DISTRICT_SUPERVISOR", "PROVINCIAL_SUPERVISOR", "NATIONAL_SUPERVISOR"];
+        pointMap("sv-pts", D.checklist_points, p => p.role, roles, p => `${esc(distName(p.code))}<br>${esc(p.role)}`, 4);
+        const days = D.planned.map(p => p.d).slice(0, D.coverage[0].days_elapsed), cd = D.checklist_daily.filter(r => C.has(r.code));
+        draw("sv-daily", { xAxis: axisCat(days.map(d => d.slice(8) + " Nov")), yAxis: axisVal(),
+          series: roles.map((r, i) => barS(r.replace("_SUPERVISOR", "").replace("PROVINCIAL", "REGIONAL").toLowerCase(), days.map(d => sum(cd.filter(x => x.d === d && x.role === r), x => x.n)), ["--s1", "--s2", "--s3", "--s4"][i], "a")) });
+      }];
+  },
+  Complaints() {
+    const C = codes(), cs = complaints(C), n = sum(cs, r => r.n), res = sum(cs, r => r.resolved);
+    return [
+      `<div class="grid">
+        ${kpi("c3", "Total complaints", fmt(n))}
+        ${kpi("c3", "Resolved", fmt(res))}
+        ${kpi("c3", "Resolution rate", pct(res / n), status(res / n, .8, .6))}
+        ${kpi("c3", "Average hours to resolve", (sum(cs, r => r.hours) / res).toFixed(1), status(sum(cs, r => r.hours) / res, 24, 48, false))}
+      </div>
+      <div class="grid">
+        ${card("c6", "cp-type", "Complaints by type and status")}
+        ${card("c6", "cp-day", "Complaints per day")}
+      </div>
+      <div class="grid">
+        ${card("c6", "cp-pts", "Complaint locations", "", "map")}
+        ${card("c6", "cp-map", "Complaints per 10,000 MR doses", "", "map")}
+      </div>
+      <div class="grid">${card("c12", "cp-tbl", "Complaints by district", "", "table")}</div>`,
+      () => {
+        const sts = ["Resolved", "Open", "Rejected"], col = { Resolved: "--s1", Open: "--s2", Rejected: "--s3" };
+        const types = Object.entries(by(cs, r => r.type)).sort((a, b) => sum(b[1], r => r.n) - sum(a[1], r => r.n)).map(x => x[0]);
+        draw("cp-type", { xAxis: axisCat(types, 20), yAxis: axisVal(), series: sts.map(s => barS(s, types.map(t => sum(cs.filter(r => r.type === t && r.status === s), r => r.n)), col[s], "a")) });
+        const days = D.planned.map(p => p.d).slice(0, D.coverage[0].days_elapsed);
+        draw("cp-day", { xAxis: axisCat(days.map(d => d.slice(8) + " Nov")), yAxis: axisVal(), series: sts.map(s => barS(s, days.map(d => sum(cs.filter(r => r.d === d && r.status === s), r => r.n)), col[s], "a")) });
+        const types2 = [...new Set(D.complaint_points.map(p => p.type))];
+        pointMap("cp-pts", D.complaint_points, p => p.type, types2, p => `${esc(distName(p.code))}<br>${esc(p.type)} · ${esc(p.status)}`, 5);
+        const byD = by(D.complaints, r => r.code);
+        choro("cp-map", c => sum(byD[c] || [], r => r.n) / doses("MR", new Set([c])) * 1e4, "Per 10k doses", v => v.toFixed(1));
+        table("cp-tbl", [{ h: "District", f: r => esc(distName(r[0])), l: 1 }, { h: "Complaints", f: r => fmt(sum(r[1], x => x.n)) }, { h: "Resolved", f: r => fmt(sum(r[1], x => x.resolved)) },
+          { h: "Resolution rate", f: r => pct(sum(r[1], x => x.resolved) / sum(r[1], x => x.n)) }, { h: "Avg hours", f: r => (sum(r[1], x => x.hours) / sum(r[1], x => x.resolved) || 0).toFixed(1) }],
+          Object.entries(by(cs, r => r.code)).sort((a, b) => sum(b[1], x => x.n) - sum(a[1], x => x.n)));
+      }];
+  },
+};
+function statusDot(v) { const c = v >= .9 ? "--good" : v >= .75 ? "--warning" : "--critical"; return `<span class="dot" style="background:var(${c})" title="${v >= .9 ? "On track" : v >= .75 ? "Watch" : "At risk"}"></span>`; }
+function evMap(id) {
+  const C = codes(), pts = D.tiles.filter(t => C.has(t.code) && prods().includes(t.product) && (!F.mode || t.mode === F.mode));
+  clusterMap(id, pts, p => p.doses, css(F.vaccine === "IPV" ? "--s2" : "--s1"), p => `${esc(distName(p.code))} · ${esc(p.mode)}<br>${PNAME[p.product]}: <b>${fmt(p.doses)}</b> doses`);
+}
+
+// ---------------------------------------------------------------- wiring
+function render() {
+  Object.values(charts).forEach(c => c.dispose()); for (const k in charts) delete charts[k];
+  Object.values(maps).forEach(m => m.remove()); for (const k in maps) delete maps[k];
+  const main = document.getElementById("main");
+  main.innerHTML = TABS.map(t => `<section class="tab ${t === active ? "on" : ""}" data-tab="${t}"></section>`).join("");
+  const parts = R[active](), after = parts.pop();
+  main.querySelector(`[data-tab="${active}"]`).innerHTML = parts.join("");
+  after();
+  document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.t === active));
+  try { localStorage.setItem("hcm-tab", active); } catch (e) {}
+}
+function fillDistricts() {
+  const ds = D.districts.filter(d => !F.region || d.region === F.region);
+  document.getElementById("fDistrict").innerHTML = `<option value="">All districts (${ds.length})</option>` + ds.map(d => `<option>${esc(d.district)}</option>`).join("");
+  document.getElementById("fDistrict").value = F.district;
+}
+async function start() {
+  D = await fetch("data.json").then(r => r.json());
+  D.dmap = Object.fromEntries(D.districts.map(d => [d.code, d]));
+  const regs = [...new Set(D.districts.map(d => d.region))].sort();
+  document.getElementById("fRegion").innerHTML = `<option value="">All regions (${regs.length})</option>` + regs.map(r => `<option>${esc(r)}</option>`).join("");
+  fillDistricts();
+  document.getElementById("tabs").innerHTML = TABS.map(t => `<button data-t="${t}">${t}</button>`).join("");
+  document.getElementById("tabs").onclick = e => { if (e.target.dataset.t) { active = e.target.dataset.t; render(); } };
+  const on = (id, k) => document.getElementById(id).onchange = e => { F[k] = e.target.value; if (k === "region") { F.district = ""; fillDistricts(); } render(); };
+  on("fRegion", "region"); on("fDistrict", "district"); on("fVaccine", "vaccine"); on("fMode", "mode");
+  document.getElementById("reset").onclick = () => { F = { region: "", district: "", vaccine: "", mode: "" }; ["fRegion", "fVaccine", "fMode"].forEach(i => document.getElementById(i).value = ""); fillDistricts(); render(); };
+  try { const t = localStorage.getItem("hcm-tab"); if (TABS.includes(t)) active = t; } catch (e) {}
+  document.getElementById("foot").innerHTML = `Snapshot generated ${esc(D.generated)} from the Superset build (day ${D.coverage[0].days_elapsed} of 11). Field records are <b>synthetic</b>; targets from the IPV-MR microplan. District boundaries are approximate (geoBoundaries + OSM-derived). Map tiles © OpenStreetMap contributors. Live version: Superset 6.1 over HCM Elasticsearch.`;
+  render();
+  window.addEventListener("resize", () => Object.values(charts).forEach(c => c.resize()));
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", render);
+}
+start();
+</script>
+</body>
+</html>
