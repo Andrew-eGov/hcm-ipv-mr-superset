@@ -292,8 +292,11 @@ MR = [F("product", "IN", ["MR"])]
 IPV = [F("product", "IN", ["IPV"])]
 VACCINES = (("MR", MR), ("IPV", IPV))
 COVERAGE = M(PCT("SUM(vaccinated)", "SUM(target)"), "Coverage of target")
-# Wastage never shows below 0% (owner's instruction): more children than doses in opened vials counts as 0%.
-WASTAGE = M(f"GREATEST(CAST(0 AS double), {PCT('SUM(doses_opened) - SUM(vaccinated)', 'SUM(doses_opened)')})", "Wastage")
+# Wastage (owner's instructions): MR shows the reported figure, 0.1%; IPV is calculated from the field data
+# and never shows below 0% (more children than doses in opened vials counts as 0%).
+MR_WASTAGE_REPORTED = 0.001
+WASTAGE = M(f"CASE WHEN MIN(product) = 'MR' AND MAX(product) = 'MR' THEN {MR_WASTAGE_REPORTED} "
+            f"ELSE GREATEST(CAST(0 AS double), {PCT('SUM(doses_opened) - SUM(vaccinated)', 'SUM(doses_opened)')}) END", "Wastage")
 
 BANNER = """<div style="padding:4px 2px;font-family:Inter,Roboto,sans-serif;line-height:1.5">
 <span style="font-size:13px;opacity:.8">Namibia · NAM-09-01-IPV-MR_NID · Round 1 · 9-19 Nov 2026 (11 days)</span><br/>
@@ -307,7 +310,7 @@ def define(days_remaining):
         "Field data: Zambezi region child and stock database (Bukalo, Katima and Sangwali clusters, 23 sites). "
         "MR and IPV are always reported separately. Target = children planned for the sites and days that uploaded "
         "data, so coverage is never compared with the national plan. Wastage = (doses in opened vials - children "
-        "vaccinated) / doses in opened vials, never below 0%; MR 5 and IPV 10 doses per vial. Gender is synthetic: the field database does not record it yet.")))
+        "vaccinated) / doses in opened vials, never below 0%; MR wastage is the reported figure (0.1%). MR 5 and IPV 10 doses per vial. Gender is synthetic: the field database does not record it yet.")))
     for v, f in VACCINES:
         r = f"1{v}"
         big(T, r, 2, f"Overview: {v} children vaccinated", "field_site_day", M("SUM(vaccinated)", "Vaccinated"),
@@ -315,7 +318,7 @@ def define(days_remaining):
         big(T, r, 2, f"Overview: {v} target", "field_site_day", M("SUM(target)", "Target"),
             f"{v}: target", ",d", f, note="reporting sites and days")
         big(T, r, 2, f"Overview: {v} coverage", "field_site_day", COVERAGE, f"{v}: coverage of target", ".1%", f)
-        big(T, r, 2, f"Overview: {v} wastage", "field_site_day", WASTAGE, f"{v}: wastage (allowed 5%)", ".1%", f)
+        big(T, r, 2, f"Overview: {v} wastage", "field_site_day", WASTAGE, f"{v}: wastage (allowed 5%)", ".1%", f, note="reported figure" if v == "MR" else "")
         big(T, r, 2, f"Overview: {v} vials opened", "field_site_day", M("SUM(vials_opened)", "Vials opened"),
             f"{v}: vials opened", ",d", f)
         big(T, r, 2, f"Overview: {v} sites reporting", "field_site_day", M("COUNT(DISTINCT site_code)", "Sites"),
@@ -398,7 +401,7 @@ def define(days_remaining):
         big(T, r, 2, f"Inventory: {v} vials issued (net)", "field_site_day", M("SUM(vials_issued_net)", "Vials"),
             f"{v}: vials issued (net)", ",d", f + [TIME_F()])
         big(T, r, 2, f"Inventory: {v} wastage", "field_site_day", WASTAGE, f"{v}: wastage % (allowed 5%)", ".1%",
-            f + [TIME_F()])
+            f + [TIME_F()], note="reported figure" if v == "MR" else "")
     for v, f in VACCINES:
         handlebars(T, 3, 6, f"Inventory: {v} days of stock left", "field_stock_days",
                    [M("ROUND(SUM(vials_in_hand) / NULLIF(SUM(daily_vials_opened), 0), 1)", "dos"),

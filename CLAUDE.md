@@ -39,7 +39,7 @@ From the product owner, the 16 Nov review or the data. Change them only after as
 - **Architecture:** Trino over Elasticsearch, chosen over a direct ES driver and over ES → Postgres sync.
 - **Four tabs; MR and IPV always separate;** "fIPV" is called IPV everywhere; vaccine filter empty = "MR + IPV".
 - **Doses per vial: MR 5, IPV 10** (inferred from the data: about 5 children per opened MR vial, 10 per IPV vial; open question in the review). In `dim_product`.
-- **Allowed wastage 5%** for both vaccines. Wastage = (doses in opened vials − children vaccinated) ÷ doses in opened vials. Wastage is floored at 0% everywhere (owner's instruction): more children than doses shows as 0%, not a negative figure.
+- **Allowed wastage 5%** for both vaccines. Wastage = (doses in opened vials − children vaccinated) ÷ doses in opened vials. **MR wastage shows the reported 0.1%** (owner's instruction; `MR_WASTAGE_REPORTED`), not the calculated figure (about −1%). IPV wastage is calculated and floored at 0%.
 - **Vials needed** = target ÷ doses per vial × 1.05. **Vials issued (net)** = received + additional − returned unopened.
 - **Vials in hand (district store)** = vials returned unopened on the latest day; **days of stock** = that ÷ average daily vials opened over the last 3 days.
 - **Sankey store layers** (national, regional, district) are synthetic sums of the site layer, as the review allows.

@@ -77,7 +77,8 @@ tools/.venv/bin/python -I tools/build_superset.py
 
 ## Assumptions to confirm
 
-* **Wastage never shows below 0%** (owner's instruction): when more children are recorded than doses in opened vials, the figure is shown as 0%.
+* **MR wastage is the reported figure, 0.1%** (owner's instruction), on every card, chart and table; `MR_WASTAGE_REPORTED` in `tools/build_superset.py` and `static/index.html`. The field data alone gives about −1% for MR, because more children are recorded than doses in opened vials at 5 doses per vial.
+* **IPV wastage is calculated and never shows below 0%** (owner's instruction).
 * **Doses per vial: MR 5, IPV 10.** Inferred from the field data (about 5 children per opened MR vial and 10 per IPV vial). With 10-dose MR vials, MR wastage would be about 50%. Set in `dim_product` (`tools/load_microplan.py`).
 * **Campaign day comes from the date** (9 Nov = day 1, 11 days). The workbook's sheets disagree: Children calls 10 Nov day 1; Agg and Stock call it day 2.
 * **Vials in hand in the district store** = vials returned unopened on the latest day; the workbook has no store stock. Days of stock = that ÷ average daily vials opened (last 3 days).

@@ -198,7 +198,8 @@ function rows(p, opts = {}) {   // site-day rows for vaccine p (or both) under t
 const vac = rs => sum(rs, r => r.vac), tgt = rs => sum(rs, r => r.target);
 const cov = rs => vac(rs) / tgt(rs);
 const dosesOpened = rs => sum(rs, r => r.opened * r.dpv);
-const waste = rs => { const d = dosesOpened(rs); return d ? Math.max(0, (d - vac(rs)) / d) : NaN; };   // never below 0% (owner's instruction)
+const MR_WASTAGE_REPORTED = 0.001;   // owner's instruction: MR shows the reported 0.1%; IPV is calculated, never below 0%
+const waste = rs => { if (rs.length && rs.every(r => r.p === "MR")) return MR_WASTAGE_REPORTED; const d = dosesOpened(rs); return d ? Math.max(0, (d - vac(rs)) / d) : NaN; };
 const net = r => (r.rec || 0) + (r.add || 0) - (r.ret || 0);
 const need = r => r.target / r.dpv * (1 + WASTE_OK);
 const unbalanced = r => (r.rec || 0) + (r.add || 0) - (r.opened || 0) - (r.ret || 0);
@@ -333,12 +334,12 @@ R.Overview = () => {
     kpi("c2", `${p}: children vaccinated`, fmt(vac(rs))),
     kpi("c2", `${p}: target`, fmt(tgt(rs)), `<div class="t">reporting sites and days</div>`),
     kpi("c2", `${p}: coverage of target`, pct(cov(rs), 1), status(cov(rs), .9, .7), cov(rs), VCOL[p]),
-    kpi("c2", `${p}: wastage (allowed 5%)`, pct(waste(rs), 1), wstatus(waste(rs))),
+    kpi("c2", `${p}: wastage (allowed 5%)`, pct(waste(rs), 1), (p === "MR" ? `<div class="t">reported figure</div>` : "") + wstatus(waste(rs))),
     kpi("c2", `${p}: vials opened`, fmt(sum(rs, r => r.opened))),
     kpi("c2", `${p}: sites reporting`, fmt(uniq(rs.map(r => r.code)).length)),
   ].join("")}</div>`; };
   return [
-    `<div class="grid"><div class="card c12 banner">Field data: Zambezi region child and stock database (Bukalo, Katima and Sangwali clusters, 23 sites). MR and IPV are always shown separately. <b>Target</b> = children planned for the sites and days that uploaded data, so coverage is never compared with the national plan. <b>Wastage</b> = (doses in opened vials − children vaccinated) ÷ doses in opened vials, never below 0%; MR 5 and IPV 10 doses per vial.</div></div>`,
+    `<div class="grid"><div class="card c12 banner">Field data: Zambezi region child and stock database (Bukalo, Katima and Sangwali clusters, 23 sites). MR and IPV are always shown separately. <b>Target</b> = children planned for the sites and days that uploaded data, so coverage is never compared with the national plan. <b>Wastage</b> = (doses in opened vials − children vaccinated) ÷ doses in opened vials, never below 0%; MR wastage is the reported figure (0.1%). MR 5 and IPV 10 doses per vial.</div></div>`,
     prods().map(vkpis).join(""),
     `<div class="grid">${prods().map(p => card("c6", `ovPie${p}`, `${p}: vaccinated vs remaining to target`)).join("")}</div>`,
     `<div class="grid">${card("c6", "ovReg", "Coverage by region (MR and IPV)")}${card("c6", "ovDist", "Coverage by district (MR and IPV)")}</div>`,
@@ -392,7 +393,7 @@ R.Inventory = () => {
   const vrow = p => { const rs = rows(p); return `<div class="grid">${[
     kpi("c2", `${p}: vials received`, fmt(sum(rs, r => r.rec))), kpi("c2", `${p}: additional vials received`, fmt(sum(rs, r => r.add))),
     kpi("c2", `${p}: vials opened`, fmt(sum(rs, r => r.opened))), kpi("c2", `${p}: vials returned unopened`, fmt(sum(rs, r => r.ret))),
-    kpi("c2", `${p}: vials issued (net)`, fmt(sum(rs, net))), kpi("c2", `${p}: wastage % (allowed 5%)`, pct(waste(rs), 1), wstatus(waste(rs))),
+    kpi("c2", `${p}: vials issued (net)`, fmt(sum(rs, net))), kpi("c2", `${p}: wastage % (allowed 5%)`, pct(waste(rs), 1), (p === "MR" ? `<div class="t">reported figure</div>` : "") + wstatus(waste(rs))),
   ].join("")}</div>`; };
   return [
     `<div class="grid">${kpi("c3", "Stores and sites with at least one stock entry", fmt(sitesStock))}${VAX.map(p => kpi("c3", `${p} vials in hand — district store`, fmt(stockDays(p).inHand), `<div class="t">returned unopened on the latest day</div>`)).join("")}${kpi("c3", "Campaign day", `${day} <small style="font-size:14px;color:var(--muted)">of ${D.campaign_days}</small>`)}</div>`,
