@@ -346,12 +346,10 @@ const R = {
         ${kpi("c2", "Records with GPS / duplicate issues", pct(dqRate(C), 1), status(dqRate(C), .03, .06, false))}
       </div>
       <div class="grid">
-        ${kpi("c2", "Zero-dose children reached " + SYNTH, fmt(sum(zdRows(C).filter(r => r.zd), r => r.n)), `<div class="t">No prior routine dose (card or recall)</div>`)}
-        ${kpi("c2", "Zero-dose share of children vaccinated", pct(zdShare(C), 1))}
-        ${kpi("c2", "AEFI reported " + SYNTH, fmt(sum(aefiRows(C), r => r.n)), `<div class="t">Adverse events following immunization</div>`)}
-        ${kpi("c2", "Serious AEFI", fmt(sum(aefiRows(C).filter(r => r.severity === "Serious"), r => r.n)))}
-        ${kpi("c2", "AEFI per 100,000 doses", aefiRate(C).toFixed(1))}
-        ${kpi("c2", "Serious AEFI investigated", (s => pct(sum(s.filter(r => r.investigation === "completed"), r => r.n) / sum(s, r => r.n)))(aefiRows(C).filter(r => r.severity === "Serious")))}
+        ${kpi("c3", "Zero-dose children reached " + SYNTH, fmt(sum(zdRows(C).filter(r => r.zd), r => r.n)), `<div class="t">No prior routine dose (card or recall)</div>`)}
+        ${kpi("c3", "Zero-dose share of children vaccinated", pct(zdShare(C), 1))}
+        ${kpi("c3", "AEFI reported " + SYNTH, fmt(sum(aefiRows(C), r => r.n)), `<div class="t">Adverse events following immunization</div>`)}
+        ${kpi("c3", "AEFI per 100,000 doses", aefiRate(C).toFixed(1))}
       </div>
       <div class="grid">
         ${card("c6", "ov-map-cov", `${F.vaccine ? PNAME[F.vaccine] : "MR"} coverage by district`, "Cumulative to date; click-free tooltips on hover", "map")}

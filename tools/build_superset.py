@@ -251,7 +251,7 @@ BANNER = """<div style="padding:4px 2px;font-family:Inter,Roboto,sans-serif">
 def define():
     # ---------------- Overview
     T = "Overview"
-    markdown(T, 0, 12, 10, BANNER.format(text="Live from HCM Elasticsearch via Trino (cache 60s). "
+    markdown(T, 0, 12, 15, BANNER.format(text="Live from HCM Elasticsearch via Trino (cache 60s). "
              "Targets: microplan (fIPV 4-59 months = 95% of U5; MR 9 months-<10 years). "
              "District shapes are approximate (OSM / geoBoundaries) until official shapefiles are supplied. "
              "Zero-dose = no prior routine dose (card or caregiver recall). AEFI = adverse events following immunization; "
@@ -280,17 +280,13 @@ def define():
         M(PCT("SUM(missing_gps + low_accuracy + outside_district + duplicates)", "SUM(records)"), "DQ"),
         "Records with GPS / duplicate issues", ".1%")
     # zero-dose & AEFI (synthetic until HCM captures them)
-    big(T, "3b", 2, "Overview: zero-dose children reached", "hcm_zero_dose_daily", M("SUM(CASE WHEN zero_dose THEN children ELSE 0 END)", "Zero-dose"),
+    big(T, "3b", 3, "Overview: zero-dose children reached", "hcm_zero_dose_daily", M("SUM(CASE WHEN zero_dose THEN children ELSE 0 END)", "Zero-dose"),
         "Zero-dose children vaccinated (no prior routine dose)", ",d", [TIME_F()])
-    big(T, "3b", 2, "Overview: zero-dose share", "hcm_zero_dose_daily", M(PCT("SUM(CASE WHEN zero_dose THEN children ELSE 0 END)", "SUM(children)"), "Zero-dose share"),
+    big(T, "3b", 3, "Overview: zero-dose share", "hcm_zero_dose_daily", M(PCT("SUM(CASE WHEN zero_dose THEN children ELSE 0 END)", "SUM(children)"), "Zero-dose share"),
         "of children vaccinated were zero-dose", ".1%", [TIME_F()])
-    big(T, "3b", 2, "Overview: AEFI reported", "hcm_aefi_daily", M("SUM(cases)", "AEFI"), "AEFI reported (all severities)", ",d", [TIME_F()])
-    big(T, "3b", 2, "Overview: serious AEFI", "hcm_aefi_daily", M("SUM(serious_cases)", "Serious AEFI"), "Serious AEFI", ",d", [TIME_F()])
-    big(T, "3b", 2, "Overview: AEFI rate", "hcm_zero_dose_aefi_district", M("100000.0*SUM(aefi)/NULLIF(SUM(doses),0)", "Per 100k"),
+    big(T, "3b", 3, "Overview: AEFI reported", "hcm_aefi_daily", M("SUM(cases)", "AEFI"), "AEFI reported (all severities)", ",d", [TIME_F()])
+    big(T, "3b", 3, "Overview: AEFI rate", "hcm_zero_dose_aefi_district", M("100000.0*SUM(aefi)/NULLIF(SUM(doses),0)", "Per 100k"),
         "AEFI per 100,000 doses", ",.1f")
-    big(T, "3b", 2, "Overview: serious AEFI investigated", "hcm_aefi_daily",
-        M(PCT("SUM(CASE WHEN severity='Serious' AND investigation='completed' THEN cases ELSE 0 END)", "SUM(serious_cases)"), "Investigated"),
-        "Serious AEFI with completed investigation", ".0%", [TIME_F()])
     choropleth(T, 4, 6, "Overview map: MR coverage % by district", M("MAX(mr_coverage_pct)", "MR coverage %"))
     hexmap(T, 4, 6, "Overview map: vaccination events (clustered)", "hcm_map_delivery_tiles", "SUM(doses)", "Doses")
     hexmap(T, "5a", 6, "Overview map: zero-dose children reached (clustered)", "hcm_map_zero_dose_tiles",

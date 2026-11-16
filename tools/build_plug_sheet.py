@@ -119,11 +119,10 @@ FIELDS = [
      "K45 K46 K47", "Asked at registration. If HCM stores prior doses instead, 'Needs transform': zeroDose = no prior DTP1/MCV1."),
     ("F25", "I2", "priorVaccinationSource", "keyword", "How prior status was established: CARD / RECALL / NONE", "CARD", "K45",
      "Optional - documents the zero-dose evidence."),
-    ("F90", "I8", "severity", "keyword", "SERIOUS / NON_SERIOUS (WHO AEFI classification)", "NON_SERIOUS", "K48 K49 K50 K51 K52 K54", ""),
+    ("F90", "I8", "severity", "keyword", "SERIOUS / NON_SERIOUS (WHO AEFI classification)", "NON_SERIOUS", "K48 K49 K50 K52 K54", ""),
     ("F91", "I8", "symptom", "keyword", "Main symptom - free list (fever, injection-site reaction, febrile seizure...)", "FEVER", "K52 K54", ""),
     ("F92", "I8", "productCode", "keyword", "Suspected vaccine: MR / IPV / MR+IPV", "MR+IPV", "K53", "MR+IPV when the event cannot be attributed to one vaccine."),
     ("F93", "I8", "outcome", "keyword", "RECOVERED / RECOVERING / REFERRED / HOSPITALISED", "RECOVERED", "K54", ""),
-    ("F94", "I8", "investigationStatus", "keyword", "COMPLETED / PENDING / NOT_REQUIRED (serious cases need an investigation)", "PENDING", "K51", ""),
     ("F95", "I8", "individualId", "keyword", "Child id - links the AEFI to the vaccination record", "IND-3f2a9c1d0b7e44", "K53", "Optional but recommended."),
     ("F83", "I6", "resolutionHours", "float", "Hours from creation to resolution (empty if open)", "21.5", "K41", "Usually 'Needs transform': (resolved time - created time) in hours."),
 ]
@@ -167,9 +166,6 @@ CODES = [
     ("F90", "severity", "SERIOUS", "Serious AEFI (hospitalisation, life-threatening, disability, death)"),
     ("F90", "severity", "NON_SERIOUS", "Non-serious AEFI"),
     ("F92", "productCode (AEFI)", "MR+IPV", "Suspected vaccine cannot be attributed to one of the two"),
-    ("F94", "investigationStatus", "COMPLETED", "Investigation completed"),
-    ("F94", "investigationStatus", "PENDING", "Investigation not yet completed"),
-    ("F94", "investigationStatus", "NOT_REQUIRED", "Non-serious case - no investigation needed"),
 ]
 
 # id, tab, KPI, definition, numerator, denominator, ES indexes, fields, microplan inputs, dataset
@@ -222,9 +218,8 @@ KPIS = [
     ("K46", "Overview / Coverage", "Zero-dose share", "Zero-dose children ÷ all children vaccinated", "Zero-dose children", "Children vaccinated", "I1", "F01 F11 F15 F24", "-", "hcm_zero_dose_daily"),
     ("K47", "Overview / Coverage (map)", "Zero-dose children map (clustered) and share by district", "Zero-dose children per map tile; share per district", "Zero-dose children", "Children vaccinated", "I1", "F01 F04 F11 F14 F15 F24", "district polygons", "hcm_map_zero_dose_tiles, hcm_map_coverage"),
     ("K48", "Overview / Coverage", "AEFI reported", "Count of AEFI cases", "-", "-", "I8", "F01 F02 F90", "-", "hcm_aefi_daily"),
-    ("K49", "Overview / Coverage", "Serious AEFI", "Count where severity = SERIOUS", "-", "-", "I8", "F01 F02 F90", "-", "hcm_aefi_daily"),
+    ("K49", "Coverage (table, charts)", "Serious AEFI", "Count where severity = SERIOUS (column in the district table; split in AEFI charts)", "-", "-", "I8", "F01 F02 F90", "-", "hcm_aefi_daily"),
     ("K50", "Overview / Coverage (map)", "AEFI per 100,000 doses", "AEFI cases ÷ doses administered × 100,000, overall and by district", "AEFI cases", "Doses administered", "I8 I1", "F01 F90 F10 F11 F13", "-", "hcm_zero_dose_aefi_district, hcm_map_coverage"),
-    ("K51", "Overview", "Serious AEFI investigated", "Serious AEFI with investigation COMPLETED ÷ serious AEFI", "Investigated serious cases", "Serious cases", "I8", "F01 F90 F94", "-", "hcm_aefi_daily"),
     ("K52", "Coverage", "AEFI by symptom and severity", "Counts", "-", "-", "I8", "F01 F90 F91", "-", "hcm_aefi_daily"),
     ("K53", "Coverage", "AEFI by suspected vaccine", "Counts by MR / fIPV / not attributable", "-", "-", "I8", "F01 F92 F95", "-", "hcm_aefi_daily"),
     ("K54", "Coverage (map)", "AEFI cases map", "AEFI cases as points coloured by severity", "-", "-", "I8", "F01 F05 F06 F90 F91 F93", "-", "hcm_points_aefi"),
