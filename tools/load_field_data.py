@@ -18,6 +18,7 @@ so it is kept only as source_campaign_day for the data-quality tab.
 """
 import csv
 import datetime as dt
+import hashlib
 import http.client
 import json
 import os
@@ -47,7 +48,14 @@ SITE_FIELDS = dict(vaccine=KW, event_date={"type": "date"}, campaign_day=INT, so
                    vials_returned_unopened=INT)
 CHILD_FIELDS = dict(child_id=KW, event_date={"type": "date"}, campaign_day=INT, source_campaign_day=INT,
                     site_code=KW, site_name=KW, cluster=KW, age_group=KW, ipv=INT, mr=INT, ipv_eligible=INT,
-                    vaccine_status=KW, gender=KW)
+                    vaccine_status=KW, gender=KW, gender_synthetic=INT)
+
+
+def synthetic_gender(child_id):
+    """The workbook has no gender column. Until it does, give each child a stable synthetic
+    gender (about 50.7% male, Namibia's sex ratio at birth), flagged gender_synthetic = 1."""
+    h = int(hashlib.sha256(f"gender-20261109-{child_id}".encode()).hexdigest()[:8], 16) / 0xFFFFFFFF
+    return "MALE" if h < 0.507 else "FEMALE"
 
 
 def es(method, path, body=None, ndjson=False):
@@ -139,7 +147,8 @@ def main():
                                              site_name=c["Site"], cluster=c["Cluster"], age_group=c["Age_Group"],
                                              ipv=c["IPV"], mr=c["MR"], ipv_eligible=c["IPV_Eligible"],
                                              vaccine_status=c["Vaccine_Status"],
-                                             gender=c.get("Gender") or c.get("Sex"))))   # not in the workbook yet
+                                             gender=(c.get("Gender") or c.get("Sex") or synthetic_gender(c["Child_ID"])),
+                                             gender_synthetic=0 if (c.get("Gender") or c.get("Sex")) else 1)))
 
     for idx in LEGACY_IDX:
         es("DELETE", f"/{idx}")

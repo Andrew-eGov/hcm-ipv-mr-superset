@@ -83,7 +83,7 @@ tools/.venv/bin/python -I tools/build_superset.py
 * **Sankey store layers** (national, regional, district) are not in the field data; they are the sums of the site layer.
 * **Facility type** comes from the site name (Health Centre / Clinic); other sites are outreach points, and Masokotwani is a school. Two sites (Homba Clinic, Nchichimani) have no coordinates in the source and none in OpenStreetMap, so they sit at their cluster centre.
 * **All Zambezi clusters sit in the microplan district Katima Mulilo**, so district charts show one bar until other districts upload.
-* **Gender is not in the field database**, so the gender pies show "Not recorded".
+* **Gender is synthetic.** The field database has no gender column, so `tools/load_field_data.py` gives each child a stable synthetic gender (about 50.7% male) and flags it `gender_synthetic = 1`. The gender pies are labelled synthetic. A real `Gender` column in the workbook replaces it automatically.
 * **District shapes are approximate** (Voronoi cells around district seats inside geoBoundaries regions). Replace `data/districts.geojson` with official shapes when available.
 * **Row-level security** is not configured yet (open by design for now).
 

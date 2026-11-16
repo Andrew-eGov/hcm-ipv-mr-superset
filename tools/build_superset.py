@@ -308,7 +308,7 @@ def define(days_remaining):
         "Field data: Zambezi region child and stock database (Bukalo, Katima and Sangwali clusters, 23 sites). "
         "MR and IPV are always reported separately. Target = children planned for the sites and days that uploaded "
         "data, so coverage is never compared with the national plan. Wastage = (doses in opened vials - children "
-        "vaccinated) / doses in opened vials; MR 5 and IPV 10 doses per vial.")))
+        "vaccinated) / doses in opened vials; MR 5 and IPV 10 doses per vial. Gender is synthetic: the field database does not record it yet.")))
     for v, f in VACCINES:
         r = f"1{v}"
         big(T, r, 2, f"Overview: {v} children vaccinated", "field_site_day", M("SUM(vaccinated)", "Vaccinated"),
@@ -338,7 +338,7 @@ def define(days_remaining):
                    "sites are outreach points, and Masokotwani is a school. Homba Clinic and Nchichimani have no "
                    "coordinates and sit at their cluster centre.")
     for v, f in VACCINES:
-        pie(T, 6, 6, f"Overview: gender distribution ({v})", "field_children", "gender", M("SUM(children)", "Children"),
+        pie(T, 6, 6, f"Overview: gender distribution ({v}) - synthetic", "field_children", "gender", M("SUM(children)", "Children"),
             filters=f + [TIME_F()], legend=True)
 
     # ---------------- Coverage
@@ -588,7 +588,8 @@ def build_dashboard(ds_ids, ds_cols):
     meta = {"native_filter_configuration": native_filters(ds_ids, ds_cols), "cross_filters_enabled": True,
             "refresh_frequency": 300, "color_scheme": "supersetColors",
             "label_colors": {"MR": "#F47738", "IPV": "#2A78D6", "Vaccinated": "#0CA30C",
-                             "Remaining to target": "#C9CED6", "Not recorded": "#9AA3AD"},
+                             "Remaining to target": "#C9CED6", "Not recorded": "#9AA3AD",
+                             "Male": "#2A78D6", "Female": "#E87BA4"},
             "shared_label_colors": [], "timed_refresh_immune_slices": [], "expanded_slices": {},
             "chart_configuration": {}, "global_chart_configuration": {"scope": {"rootPath": ["ROOT_ID"], "excluded": []},
                                                                        "chartsInScope": on_dash}}

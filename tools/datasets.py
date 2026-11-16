@@ -71,10 +71,11 @@ WHERE t.vaccinated IS NOT NULL"""
 
 
 def ds_children():
-    """Child line list: one row per child x vaccine received (gender, age group as recorded)."""
+    """Child line list: one row per child x vaccine received. Gender is synthetic until the source records it."""
     return f"""
 SELECT {DIMS}, v.product, v.product AS product_label, CAST(c.event_date AS date) AS event_date,
-       c.age_group, coalesce(nullif(c.gender, ''), 'Not recorded') AS gender, c.vaccine_status, 1 AS children
+       c.age_group, CASE c.gender WHEN 'MALE' THEN 'Male' WHEN 'FEMALE' THEN 'Female' ELSE 'Not recorded' END AS gender,
+       c.gender_synthetic, c.vaccine_status, 1 AS children
 FROM {CHILD} c
 JOIN {MP}.dim_site s ON s.site_code = c.site_code
 CROSS JOIN UNNEST(ARRAY['MR', 'IPV'], ARRAY[c.mr, c.ipv]) AS v(product, received)

@@ -48,7 +48,7 @@ FIELDS = [
     ("F05", "I1", "mr", "integer", "1 if MR given, else 0", "1", "K13 K30 K32", ""),
     ("F06", "I1", "ipv", "integer", "1 if IPV given, else 0", "1", "K13 K30 K32", ""),
     ("F07", "I1", "vaccine_status", "keyword", "Which vaccines the child received - see sheet 4", "IPV + MR", "K31", ""),
-    ("F08", "I1", "gender", "keyword", "MALE / FEMALE (empty if not recorded)", "FEMALE", "K13", "Not in the field database yet: the gender pies show 'Not recorded'."),
+    ("F08", "I1", "gender", "keyword", "MALE / FEMALE (empty if not recorded)", "FEMALE", "K13", "Not in the field database yet: the loader fills a synthetic gender (gender_synthetic = 1) and the pies are labelled synthetic."),
     ("F09", "I1", "source_campaign_day", "integer", "Campaign day as written by the source", "1", "K33", "Only used to flag day-number mismatches."),
     ("F20", "I2", "vaccine", "keyword", "MR or IPV - see sheet 4", "MR", "All I2 KPIs", "One document per vaccine."),
     ("F21", "I2", "event_date", "date", "Report date (yyyy-MM-dd)", "2026-11-10", "All I2 KPIs", "Campaign day is computed from this date (9 Nov = day 1)."),
