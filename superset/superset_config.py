@@ -29,6 +29,45 @@ CACHE_CONFIG = {
 }
 DATA_CACHE_CONFIG = CACHE_CONFIG
 
+# ---------------------------------------------------------------------------
+# Themes: HCM-branded light (default) and dark. With both defined, Superset
+# shows a light/dark/system switcher in the top bar and follows the user's
+# device setting until they pick one. Replace whole dicts - Superset does not
+# merge these with its built-in defaults.
+_HCM_TOKENS = {
+    "brandAppName": "HCM Dashboards",
+    "brandLogoAlt": "HCM",
+    "brandLogoUrl": "/static/assets/images/superset-logo-horiz.png",
+    "brandLogoMargin": "18px 0",
+    "brandLogoHref": "/",
+    "brandLogoHeight": "24px",
+    "brandSpinnerUrl": None,
+    "brandSpinnerSvg": None,
+    "colorPrimary": "#F47738",   # HCM orange (tabs, buttons, active states)
+    "colorLink": "#0B4B66",      # HCM teal
+    "colorError": "#D03B3B",
+    "colorWarning": "#FAB219",
+    "colorSuccess": "#0CA30C",
+    "colorInfo": "#2A78D6",
+    "fontUrls": [],
+    "fontFamily": "Inter, Roboto, Helvetica, Arial, sans-serif",
+    "fontFamilyCode": "'IBM Plex Mono', 'Courier New', monospace",
+    "transitionTiming": 0.3,
+    "brandIconMaxWidth": 37,
+    "fontSizeXS": "8",
+    "fontSizeXXL": "28",
+    "fontWeightNormal": "400",
+    "fontWeightLight": "300",
+    "fontWeightStrong": "500",
+    "fontWeightBold": "700",
+    "colorEditorSelection": "#fff5cf",
+}
+THEME_DEFAULT = {"token": dict(_HCM_TOKENS), "algorithm": "default"}
+THEME_DARK = {
+    "token": {**_HCM_TOKENS, "colorLink": "#8CC7E3", "colorEditorSelection": "#5c4d1a"},
+    "algorithm": "dark",
+}
+
 ROW_LIMIT = 50000
 SQL_MAX_ROW = 200000
 SUPERSET_WEBSERVER_TIMEOUT = 300

@@ -543,8 +543,6 @@ CSS = """
 .dashboard-header .header-title, .editable-title input { font-weight: 700; }
 .dashboard-component-tabs .ant-tabs-tab-active .ant-tabs-tab-btn { color: #F47738 !important; font-weight: 600; }
 .dashboard-component-tabs .ant-tabs-ink-bar { background: #F47738 !important; height: 3px !important; }
-.header-title { color: #0B4B66; }
-.big_number .header-line { color: #0B4B66 !important; }
 """
 
 
