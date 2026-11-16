@@ -25,6 +25,7 @@ IDX = {
     "checklist": "service-task-v1",
     "complaint": "pgr-services-index-v1",
     "downsync": "downsync-index-v1",
+    "aefi": "aefi-index-v1",
 }
 CAMPAIGN_START = "2026-11-09"
 CAMPAIGN_DAYS = 11
@@ -576,16 +577,22 @@ POLY_COLS = "p.region, p.district, p.boundary_code, p.polygon"
 
 
 def ds_map_coverage():
-    """Choropleth: coverage per district polygon part."""
+    """Choropleth: coverage, zero-dose share and AEFI rate per district polygon part."""
     return f"""
 WITH {coverage_cte()},
+{zd_aefi_ctes()},
 de AS (SELECT {DAYS_ELAPSED} AS days_elapsed)
 SELECT {POLY_COLS},
        100.0 * coalesce(mr.doses, 0) / d.mr_target AS mr_coverage_pct,
        100.0 * coalesce(ip.doses, 0) / d.ipv_target AS ipv_coverage_pct,
        coalesce(mr.doses, 0) AS mr_doses, coalesce(ip.doses, 0) AS ipv_doses, d.mr_target, d.ipv_target,
-       100.0 * coalesce(mr.doses, 0) / (d.mr_target * de.days_elapsed / {CAMPAIGN_DAYS}) AS mr_vs_plan_pct
+       100.0 * coalesce(mr.doses, 0) / (d.mr_target * de.days_elapsed / {CAMPAIGN_DAYS}) AS mr_vs_plan_pct,
+       100.0 * zd.zd_children / nullif(zd.children, 0) AS zero_dose_pct, zd.zd_children,
+       100000.0 * coalesce(ae.aefi, 0) / nullif(dz.doses, 0) AS aefi_per_100k_doses
 {POLY} CROSS JOIN de
+LEFT JOIN zd ON zd.boundary_code = p.boundary_code
+LEFT JOIN ae ON ae.boundary_code = p.boundary_code
+LEFT JOIN dz ON dz.boundary_code = p.boundary_code
 LEFT JOIN cov mr ON mr.boundary_code = p.boundary_code AND mr.product = 'MR'
 LEFT JOIN cov ip ON ip.boundary_code = p.boundary_code AND ip.product = 'IPV'
 """
@@ -638,6 +645,96 @@ SELECT {POLY_COLS}, coalesce(cmp.n, 0) AS complaints,
 {POLY}
 LEFT JOIN cov mr ON mr.boundary_code = p.boundary_code AND mr.product = 'MR'
 LEFT JOIN cmp ON cmp.boundary_code = p.boundary_code
+"""
+
+
+# ------------------------------------------------------------------ zero-dose & AEFI
+ZD_SUCCESS = {"bool": {"filter": [SUCCESS, {"term": {F("zeroDose"): True}}]}}
+AEFI_SEVERITY = "CASE {c} WHEN 'SERIOUS' THEN 'Serious' ELSE 'Non-serious' END"
+
+
+def ds_zero_dose_daily():
+    """Children vaccinated, split zero-dose (no prior routine dose) vs previously vaccinated."""
+    return f"""
+WITH b AS ({composite(IDX['task'], [("day", DAY), ("code", terms("boundaryHierarchyCode.district")),
+                                     ("mode", terms("deliveryMode")), ("zd", terms("zeroDose", True))],
+                      {"kids": {"cardinality": {"field": F("individualId"), "precision_threshold": 40000}}}, SUCCESS)})
+SELECT CAST({k('day')} AS date) AS event_date, d.region, d.district, d.boundary_code,
+       {MODE_LABEL.format(c=k('mode'))} AS delivery_mode,
+       CASE {k('zd')} WHEN 'true' THEN 'Zero-dose' WHEN 'false' THEN 'Previously vaccinated' ELSE 'Not recorded' END AS zero_dose_status,
+       {k('zd')} = 'true' AS zero_dose, {v('kids.value', 'bigint')} AS children
+FROM b JOIN {MP}.dim_district d ON d.boundary_code = {k('code')}
+"""
+
+
+def ds_aefi_daily():
+    """AEFI cases by day, district, suspected vaccine, severity, symptom, outcome and investigation status."""
+    return f"""
+WITH b AS ({composite(IDX['aefi'], [("day", DAY), ("code", terms("boundaryHierarchyCode.district")),
+                                     ("product", terms("productCode")), ("sev", terms("severity")),
+                                     ("sym", terms("symptom")), ("out", terms("outcome")),
+                                     ("inv", terms("investigationStatus"))])})
+SELECT CAST({k('day')} AS date) AS event_date, d.region, d.district, d.boundary_code,
+       {k('product')} AS product,
+       CASE {k('product')} WHEN 'MR' THEN 'Measles-Rubella (MR)' WHEN 'IPV' THEN 'fIPV' ELSE 'MR + fIPV (not attributable)' END AS suspected_vaccine,
+       {AEFI_SEVERITY.format(c=k('sev'))} AS severity, lower(replace({k('sym')}, '_', ' ')) AS symptom,
+       lower({k('out')}) AS outcome, lower(replace({k('inv')}, '_', ' ')) AS investigation,
+       {v('doc_count', 'bigint')} AS cases,
+       CASE WHEN {k('sev')} = 'SERIOUS' THEN {v('doc_count', 'bigint')} ELSE 0 END AS serious_cases
+FROM b JOIN {MP}.dim_district d ON d.boundary_code = {k('code')}
+"""
+
+
+def zd_aefi_ctes():
+    return f"""zd AS (
+  SELECT {k('code')} AS boundary_code, {v('kids.value', 'bigint')} AS children, {v('z.kids.value', 'bigint')} AS zd_children
+  FROM ({composite(IDX['task'], [("code", terms("boundaryHierarchyCode.district"))],
+                   {"kids": {"cardinality": {"field": F("individualId"), "precision_threshold": 40000}},
+                    "z": {"filter": {"term": {F("zeroDose"): True}},
+                          "aggs": {"kids": {"cardinality": {"field": F("individualId"), "precision_threshold": 40000}}}}},
+                   SUCCESS)})
+),
+ae AS (
+  SELECT {k('code')} AS boundary_code, {v('doc_count', 'bigint')} AS aefi, {v('s.doc_count', 'bigint')} AS aefi_serious
+  FROM ({composite(IDX['aefi'], [("code", terms("boundaryHierarchyCode.district"))],
+                   {"s": {"filter": {"term": {F("severity"): "SERIOUS"}}}})})
+),
+dz AS (SELECT boundary_code, sum(doses) AS doses FROM cov GROUP BY 1)"""
+
+
+def ds_zero_dose_aefi_district():
+    """Per district: children reached, zero-dose children, doses, AEFI and serious AEFI (rate per 100,000 doses)."""
+    return f"""
+WITH {coverage_cte()},
+{zd_aefi_ctes()}
+SELECT d.region, d.district, d.boundary_code, coalesce(zd.children, 0) AS children, coalesce(zd.zd_children, 0) AS zd_children,
+       coalesce(dz.doses, 0) AS doses, coalesce(ae.aefi, 0) AS aefi, coalesce(ae.aefi_serious, 0) AS aefi_serious
+FROM {MP}.dim_district d
+LEFT JOIN zd ON zd.boundary_code = d.boundary_code
+LEFT JOIN ae ON ae.boundary_code = d.boundary_code
+LEFT JOIN dz ON dz.boundary_code = d.boundary_code
+"""
+
+
+def ds_map_zero_dose_tiles():
+    return f"""
+WITH b AS ({tiles(IDX['task'], [("code", terms("boundaryHierarchyCode.district")), ("mode", terms("deliveryMode"))], ZD_SUCCESS,
+                  extra={"kids": {"cardinality": {"field": F("individualId")}}})})
+SELECT d.region, d.district, d.boundary_code, {MODE_LABEL.format(c=k('mode'))} AS delivery_mode,
+       {v('c.location.lat')} AS latitude, {v('c.location.lon')} AS longitude, {v('kids.value', 'bigint')} AS zd_children
+FROM b JOIN {MP}.dim_district d ON d.boundary_code = {k('code')}
+"""
+
+
+def ds_points_aefi():
+    return f"""
+WITH b AS ({hits(IDX['aefi'], {"exists": {"field": F("latitude")}},
+                 ["latitude", "longitude", "severity", "symptom", "productCode", "outcome", "boundaryHierarchyCode", "eventTime"])})
+SELECT d.region, d.district, d.boundary_code, {s('productCode')} AS product,
+       {AEFI_SEVERITY.format(c=s('severity'))} AS severity, lower(replace({s('symptom')}, '_', ' ')) AS symptom,
+       lower({s('outcome')}) AS outcome, CAST(substr({s('eventTime')}, 1, 10) AS date) AS event_date,
+       {s('latitude', 'double')} AS latitude, {s('longitude', 'double')} AS longitude
+FROM b JOIN {MP}.dim_district d ON d.boundary_code = {s('boundaryHierarchyCode.district')}
 """
 
 
@@ -696,6 +793,11 @@ DATASETS = {
     "hcm_map_supervision": (ds_map_supervision, None),
     "hcm_map_complaints": (ds_map_complaints, None),
     "hcm_planned_vs_actual": (ds_planned_vs_actual, "event_date"),
+    "hcm_zero_dose_daily": (ds_zero_dose_daily, "event_date"),
+    "hcm_aefi_daily": (ds_aefi_daily, "event_date"),
+    "hcm_zero_dose_aefi_district": (ds_zero_dose_aefi_district, None),
+    "hcm_map_zero_dose_tiles": (ds_map_zero_dose_tiles, None),
+    "hcm_points_aefi": (ds_points_aefi, "event_date"),
 }
 
 

@@ -9,6 +9,7 @@ Re-running replaces everything it created (matched by name prefix).
 import json
 import re
 import sys
+import time
 import uuid
 from pathlib import Path
 
@@ -32,7 +33,12 @@ s = requests.Session()
 
 
 def api(method, path, **kw):
-    r = s.request(method, BASE + path, **kw)
+    # Superset 6.1 rate-limits the API (50 requests/second): back off and retry on 429.
+    for attempt in range(8):
+        r = s.request(method, BASE + path, **kw)
+        if r.status_code != 429:
+            break
+        time.sleep(0.5 * (attempt + 1))
     if r.status_code >= 400:
         raise RuntimeError(f"{method} {path} -> {r.status_code}: {r.text[:800]}")
     return r.json() if r.text else {}
@@ -247,7 +253,9 @@ def define():
     T = "Overview"
     markdown(T, 0, 12, 10, BANNER.format(text="Live from HCM Elasticsearch via Trino (cache 60s). "
              "Targets: microplan (fIPV 4-59 months = 95% of U5; MR 9 months-<10 years). "
-             "District shapes are approximate (OSM / geoBoundaries) until official shapefiles are supplied."))
+             "District shapes are approximate (OSM / geoBoundaries) until official shapefiles are supplied. "
+             "Zero-dose = no prior routine dose (card or caregiver recall). AEFI = adverse events following immunization; "
+             "HCM does not capture AEFI yet, so those figures are synthetic."))
     sync_strip(T, "Frontline workers", "Frontline workers")
     gauge(T, 2, 3, "Overview: MR coverage %", "hcm_coverage", M("100.0*SUM(doses)/SUM(target)", "MR coverage %"), MR)
     gauge(T, 2, 3, "Overview: fIPV coverage %", "hcm_coverage", M("100.0*SUM(doses)/SUM(target)", "fIPV coverage %"), IPV)
@@ -271,8 +279,24 @@ def define():
     big(T, 3, 2, "Overview: GPS / record issues", "hcm_dq_district",
         M(PCT("SUM(missing_gps + low_accuracy + outside_district + duplicates)", "SUM(records)"), "DQ"),
         "Records with GPS / duplicate issues", ".1%")
+    # zero-dose & AEFI (synthetic until HCM captures them)
+    big(T, "3b", 2, "Overview: zero-dose children reached", "hcm_zero_dose_daily", M("SUM(CASE WHEN zero_dose THEN children ELSE 0 END)", "Zero-dose"),
+        "Zero-dose children vaccinated (no prior routine dose)", ",d", [TIME_F()])
+    big(T, "3b", 2, "Overview: zero-dose share", "hcm_zero_dose_daily", M(PCT("SUM(CASE WHEN zero_dose THEN children ELSE 0 END)", "SUM(children)"), "Zero-dose share"),
+        "of children vaccinated were zero-dose", ".1%", [TIME_F()])
+    big(T, "3b", 2, "Overview: AEFI reported", "hcm_aefi_daily", M("SUM(cases)", "AEFI"), "AEFI reported (all severities)", ",d", [TIME_F()])
+    big(T, "3b", 2, "Overview: serious AEFI", "hcm_aefi_daily", M("SUM(serious_cases)", "Serious AEFI"), "Serious AEFI", ",d", [TIME_F()])
+    big(T, "3b", 2, "Overview: AEFI rate", "hcm_zero_dose_aefi_district", M("100000.0*SUM(aefi)/NULLIF(SUM(doses),0)", "Per 100k"),
+        "AEFI per 100,000 doses", ",.1f")
+    big(T, "3b", 2, "Overview: serious AEFI investigated", "hcm_aefi_daily",
+        M(PCT("SUM(CASE WHEN severity='Serious' AND investigation='completed' THEN cases ELSE 0 END)", "SUM(serious_cases)"), "Investigated"),
+        "Serious AEFI with completed investigation", ".0%", [TIME_F()])
     choropleth(T, 4, 6, "Overview map: MR coverage % by district", M("MAX(mr_coverage_pct)", "MR coverage %"))
     hexmap(T, 4, 6, "Overview map: vaccination events (clustered)", "hcm_map_delivery_tiles", "SUM(doses)", "Doses")
+    hexmap(T, "5a", 6, "Overview map: zero-dose children reached (clustered)", "hcm_map_zero_dose_tiles",
+           "SUM(zd_children)", "Zero-dose children")
+    bar(T, "5a", 6, "Overview: AEFI reported per day", "hcm_aefi_daily", "event_date", [M("SUM(cases)", "AEFI")],
+        ["severity"], stack=True, temporal=True)
     bar(T, 5, 6, "Overview: coverage by region", "hcm_coverage", "region",
         [M(PCT("SUM(doses)", "SUM(target)"), "Coverage")], ["product_label"], fmt=".0%")
     line(T, 5, 6, "Overview: planned vs actual (cumulative % of target)", "hcm_planned_vs_actual",
@@ -306,6 +330,16 @@ def define():
             dimension="reason", radius=1200, tooltip=("district", "reason", "product_label"), filters=[TIME_F()])
     bar(T, 7, 6, "Coverage: children 9-59 m receiving both vaccines", "hcm_coadmin", "district",
         [M(PCT("SUM(both_9_59)", "SUM(children_9_59)"), "Both vaccines")], fmt=".0%", y_max=1)
+    bar(T, "7b", 6, "Coverage: zero-dose share of children vaccinated, by district", "hcm_zero_dose_daily", "district",
+        [M(PCT("SUM(CASE WHEN zero_dose THEN children ELSE 0 END)", "SUM(children)"), "Zero-dose share")], fmt=".0%", filters=[TIME_F()])
+    choropleth(T, "7b", 6, "Coverage map: zero-dose share %", M("MAX(zero_dose_pct)", "Zero-dose %"), scheme="oranges", legend=".1f")
+    hexmap(T, "7c", 6, "Coverage map: zero-dose children (clustered)", "hcm_map_zero_dose_tiles", "SUM(zd_children)", "Zero-dose children")
+    scatter(T, "7c", 6, "Coverage map: AEFI cases by severity", "hcm_points_aefi", dimension="severity", radius=4000,
+            tooltip=("district", "symptom", "outcome"), filters=[TIME_F()])
+    bar(T, "7d", 4, "Coverage: AEFI by symptom and severity", "hcm_aefi_daily", "symptom", [M("SUM(cases)", "AEFI")], ["severity"],
+        stack=True, horizontal=True, filters=[TIME_F()])
+    pie(T, "7d", 4, "Coverage: AEFI by suspected vaccine", "hcm_aefi_daily", "suspected_vaccine", M("SUM(cases)", "AEFI"), filters=[TIME_F()])
+    choropleth(T, "7d", 4, "Coverage map: AEFI per 100,000 doses", M("MAX(aefi_per_100k_doses)", "AEFI per 100k"), scheme="oranges", legend=".0f")
     bar(T, 8, 6, "Coverage: registrations by gender", "hcm_registration_daily", "gender", [M("SUM(registrations)", "Children")],
         filters=[TIME_F()])
     bar(T, 8, 6, "Coverage: household visit outcome", "hcm_household_daily", "visit_outcome", [M("SUM(households)", "Households")],
@@ -319,6 +353,16 @@ def define():
                 {"colorScheme": "#FDE380", "column": "vs plan to date", "operator": "<", "targetValue": 0.9},
                 {"colorScheme": "#EFA1AA", "column": "vs plan to date", "operator": "<", "targetValue": 0.7}],
           height=70, row_limit=200)
+
+    table(T, "9b", 12, "Zero-dose and AEFI by district", "hcm_zero_dose_aefi_district", ["region", "district"],
+          [M("SUM(children)", "Children vaccinated"), M("SUM(zd_children)", "Zero-dose"),
+           M(PCT("SUM(zd_children)", "SUM(children)"), "Zero-dose share"), M("SUM(doses)", "Doses"),
+           M("SUM(aefi)", "AEFI"), M("SUM(aefi_serious)", "Serious AEFI"),
+           M("100000.0*SUM(aefi)/NULLIF(SUM(doses),0)", "AEFI per 100k doses")],
+          order=M(PCT("SUM(zd_children)", "SUM(children)"), "Zero-dose share"),
+          formats={"Zero-dose share": {"d3NumberFormat": ".1%"}, "AEFI per 100k doses": {"d3NumberFormat": ",.1f"}},
+          cond=[{"colorScheme": "#EFA1AA", "column": "Serious AEFI", "operator": ">", "targetValue": 0}],
+          height=60, row_limit=100)
 
     # ---------------- Inventory
     T = "Inventory"

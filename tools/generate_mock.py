@@ -12,6 +12,7 @@ Indexes (swap names in sql/datasets/*.sql if real HCM index names differ):
   service-task-v1         supervisor checklists
   pgr-services-index-v1   complaints
   downsync-index-v1       user downsync events
+  aefi-index-v1           adverse events following immunization (synthetic; HCM has no AEFI source yet)
 
 Deliberate data-quality noise: missing/low-accuracy GPS, points outside the
 assigned district, duplicates, incomplete records, off-hours submissions,
@@ -48,11 +49,11 @@ INDEXES = {
         "administrationStatus": "keyword", "reasonNotAdministered": "keyword",
         "deliveryMode": "keyword", "teamId": "keyword", "teamType": "keyword",
         "individualId": "keyword", "householdId": "keyword", "ageInMonths": "integer",
-        "gender": "keyword", "quantity": "integer", "isCoAdministered": "boolean"},
+        "gender": "keyword", "quantity": "integer", "isCoAdministered": "boolean", "zeroDose": "boolean"},
     "individual-index-v1": {
         "individualId": "keyword", "householdId": "keyword", "ageInMonths": "integer",
         "dateOfBirth": "date", "gender": "keyword", "deliveryMode": "keyword",
-        "eligibleMR": "boolean", "eligibleIPV": "boolean"},
+        "eligibleMR": "boolean", "eligibleIPV": "boolean", "zeroDose": "boolean", "priorVaccinationSource": "keyword"},
     "household-index-v1": {
         "householdId": "keyword", "memberCount": "integer", "childrenUnder10": "integer",
         "deliveryMode": "keyword", "visitOutcome": "keyword"},
@@ -74,6 +75,11 @@ INDEXES = {
         "applicationStatus": "keyword", "source": "keyword", "resolvedTime": "date",
         "resolutionHours": "float"},
     "downsync-index-v1": {"recordsDownloaded": "integer"},
+    "aefi-index-v1": {
+        "aefiId": "keyword", "individualId": "keyword", "productCode": "keyword", "severity": "keyword",
+        "symptom": "keyword", "outcome": "keyword", "referred": "boolean", "investigationStatus": "keyword",
+        "onsetHours": "float", "ageInMonths": "integer", "gender": "keyword", "deliveryMode": "keyword",
+        "zeroDose": "boolean"},
 }
 COMMON = {"id": "keyword", "clientReferenceId": "keyword", "tenantId": "keyword", "projectId": "keyword",
           "projectName": "keyword", "campaignNumber": "keyword",
@@ -224,6 +230,7 @@ def main():
         g = shape(json.loads(d["geo"]))
         gp, b = prep(g.buffer(-0.02) if g.buffer(-0.02).area > 0.05 else g), g.bounds
         perf = rnd.uniform(0.62, 1.22)
+        zd_rate = rnd.uniform(0.02, 0.12)  # share of reached children with no prior routine dose
         vacc = [u for u in by_dist.get(d["code"], {}).get("VACCINATOR", []) if u not in silent] or ["NAM-U-X"]
         regs = [u for u in by_dist.get(d["code"], {}).get("REGISTRAR", []) if u not in silent] or vacc
         tf, tt, tm = int(d["tf"]), int(d["tt"]), int(d["tm"])
@@ -295,10 +302,14 @@ def main():
                         dob = None
                 iid = "IND-" + uuid.UUID(int=rnd.getrandbits(128)).hex[:14]
                 elig_mr, elig_ipv = 9 <= age <= 119, 4 <= age <= 59
+                # zero-dose (WHO: no prior routine dose, by card or caregiver recall): more common
+                # among younger children and those reached house-to-house
+                zd = rnd.random() < zd_rate * (1.6 if team["mode"] == "HOUSE_TO_HOUSE" else 1.0) * (1.5 if age < 24 else 0.8)
+                src = "NONE" if zd else rnd.choices(["CARD", "RECALL"], [0.6, 0.4])[0]
                 es.add("individual-index-v1", stamp({
                     "individualId": iid, "householdId": hid, "ageInMonths": age, "dateOfBirth": dob,
                     "gender": gender, "deliveryMode": team["mode"], "eligibleMR": elig_mr,
-                    "eligibleIPV": elig_ipv, **bh(d)}, t - dt.timedelta(minutes=2), registrar,
+                    "eligibleIPV": elig_ipv, "zeroDose": zd, "priorVaccinationSource": src, **bh(d)}, t - dt.timedelta(minutes=2), registrar,
                     "REGISTRAR", lat, lon, acc))
                 prods = [p for p, e in (("MR", elig_mr), ("IPV", elig_ipv)) if e]
                 for p in prods:
@@ -320,12 +331,14 @@ def main():
                            "deliveryMode": team["mode"], "teamId": team["team"], "teamType": team["ttype"],
                            "individualId": iid, "householdId": hid, "ageInMonths": age, "gender": gender,
                            "quantity": 1 if status == "ADMINISTRATION_SUCCESS" else 0,
-                           "isCoAdministered": len(prods) == 2, **bh(d)}
+                           "isCoAdministered": len(prods) == 2, "zeroDose": zd, **bh(d)}
                     es.add("project-task-index-v1", stamp(doc, t + dt.timedelta(minutes=1), vaccinator,
                                                           "DISTRIBUTOR", lat, lon, acc))
                     if status == "ADMINISTRATION_SUCCESS":
                         key = (d["code"], p, day)
                         consumption[key] = consumption.get(key, 0) + 1
+                        add_aefi(es, d, bh, iid, p, len(prods) == 2, age, gender, team["mode"], zd,
+                                 t, vaccinator, lat, lon)
                         if rnd.random() < 0.006:  # duplicate delivery record
                             dup = dict(doc)
                             es.add("project-task-index-v1", stamp(dup, t + dt.timedelta(days=rnd.randint(0, 1) if day < SIM_DAYS - 1 else 0, minutes=30),
@@ -395,6 +408,44 @@ def main():
         es.req("PUT", f"/{idx}/_settings", json.dumps({"index": {"refresh_interval": "5s"}}).encode())
         es.req("POST", f"/{idx}/_refresh")
     print("\n", json.dumps(es.counts, indent=1))
+
+
+AEFI_SYMPTOMS = {
+    "NON_SERIOUS": [("FEVER", 40), ("INJECTION_SITE_REACTION", 30), ("RASH", 12), ("IRRITABILITY", 10), ("ALLERGIC_REACTION_MILD", 8)],
+    "SERIOUS": [("FEBRILE_SEIZURE", 40), ("ANAPHYLAXIS", 15), ("HIGH_FEVER_HOSPITALISED", 30), ("THROMBOCYTOPENIA", 15)],
+}
+
+
+def add_aefi(es, d, bh, iid, product, co_admin, age, gender, mode, zd, t_dose, user, lat, lon):
+    """~90 non-serious and ~1.5 serious AEFI per 100,000 doses (synthetic rates)."""
+    u = rnd.random()
+    if u < 0.000015:
+        sev = "SERIOUS"
+    elif u < 0.0009:
+        sev = "NON_SERIOUS"
+    else:
+        return
+    if rnd.random() < 0.35 and co_admin and product == "MR":
+        product = "MR+IPV"  # cannot attribute to one vaccine
+    sym = rnd.choices(*zip(*AEFI_SYMPTOMS[sev]))[0]
+    onset = rnd.uniform(0.3, 6) if sym in ("ANAPHYLAXIS", "INJECTION_SITE_REACTION") else rnd.uniform(4, 72)
+    t = t_dose + dt.timedelta(hours=onset)
+    if t >= START + dt.timedelta(days=SIM_DAYS) - dt.timedelta(minutes=40):
+        return  # symptoms start after the snapshot date: not reported yet
+    if sev == "SERIOUS":
+        outcome = rnd.choice(["HOSPITALISED", "REFERRED", "RECOVERED"])
+        inv = rnd.choices(["COMPLETED", "PENDING"], [0.6, 0.4])[0]
+    else:
+        outcome = rnd.choices(["RECOVERED", "RECOVERING", "REFERRED"], [70, 25, 5])[0]
+        inv = "NOT_REQUIRED"
+    la = None if lat is None else round(lat + rnd.gauss(0, 0.004), 6)
+    lo = None if lon is None else round(lon + rnd.gauss(0, 0.004), 6)
+    es.add("aefi-index-v1", stamp({
+        "aefiId": "AEFI-" + uuid.UUID(int=rnd.getrandbits(128)).hex[:10], "individualId": iid,
+        "productCode": product, "severity": sev, "symptom": sym, "outcome": outcome,
+        "referred": outcome in ("REFERRED", "HOSPITALISED"), "investigationStatus": inv,
+        "onsetHours": round(onset, 1), "ageInMonths": age, "gender": gender, "deliveryMode": mode,
+        "zeroDose": zd, **bh(d)}, t, user, "DISTRIBUTOR", la, lo, 15.0))
 
 
 def add_checklist(es, d, bh, sup, role, name, team, site, day):

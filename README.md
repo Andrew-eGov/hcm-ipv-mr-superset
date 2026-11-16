@@ -28,8 +28,8 @@ Postgres "microplan" ──► Trino (postgresql connector) ──────�
 
 | Tab | Contents |
 |---|---|
-| Overview | Frontline sync strip; MR and fIPV coverage gauges; doses administered; % of children 9–59 m who got both vaccines; % vs plan; wastage; stores at risk; complaints; downsync; data-quality rate; coverage map; event clusters; coverage by region; planned vs actual |
-| Coverage | Coverage by district and vaccine; 3 choropleths (MR, fIPV, vs plan); event clusters; household heatmap; planned vs actual; daily doses by delivery mode; age groups; delivery-mode split; missed opportunities by reason and on a map; co-administration by district; gender; household outcomes; summary table |
+| Overview | Frontline sync strip; MR and fIPV coverage gauges; doses administered; % of children 9–59 m who got both vaccines; % vs plan; wastage; stores at risk; complaints; downsync; data-quality rate; zero-dose children and share; AEFI reported, serious, rate per 100k doses, serious investigated; coverage map; event clusters; zero-dose clusters; AEFI per day; coverage by region; planned vs actual |
+| Coverage | Coverage by district and vaccine; 3 choropleths (MR, fIPV, vs plan); event clusters; household heatmap; planned vs actual; daily doses by delivery mode; age groups; delivery-mode split; missed opportunities by reason and on a map; co-administration by district; zero-dose share by district (bar + map); zero-dose clusters; AEFI map by severity; AEFI by symptom, by suspected vaccine, per 100k doses map; gender; household outcomes; summary table; zero-dose and AEFI table |
 | Inventory | Warehouse sync strip; vials and syringes in hand; receipt discrepancy; days of stock; wastage vs 5%; store status map; stock-flow arcs; wastage and days-of-stock choropleths; Sankey flow; issued vs returned; discrepancy report; stock position table |
 | Data Quality | Downsync strip; 6 data-quality counters (no GPS, accuracy > 100 m, outside the assigned district, duplicates, incomplete records, off-hours); district table; data-quality choropleth; low-accuracy point map; users with more than 120 doses a day; teams with fewer than 20 doses a day; sync and downsync rates by district |
 | Supervision | Supervisor sync strip; checklist completion at team, district, regional and national level; checklist findings; daily submissions; checklist location map; completion choropleth; frontline sync by district |
@@ -51,6 +51,8 @@ Postgres "microplan" ──► Trino (postgresql connector) ──────�
 | `tools/test_datasets.sh` | Runs every dataset through Trino and reports row counts and timing |
 
 ## Rebuild from scratch
+
+**Quickest:** run `./setup.sh` (add `--no-mock` once real HCM ES is configured). It does everything below. New to the project? Read `START_HERE.md` first.
 
 Requires Docker (8 GB RAM for the VM) and Python 3.9 or later. The microplan workbook is **not in this repo**, because it contains the user list. Put it next to the repo folder, or set `MICROPLAN_XLSX=/path/to/microplan.xlsx`.
 
@@ -93,4 +95,4 @@ tools/.venv/bin/python -I tools/build_superset.py
 
 * Region boundaries: [geoBoundaries](https://www.geoboundaries.org) NAM ADM1 (CC BY 4.0, Natural Earth source)
 * District seat towns geocoded with [OpenStreetMap Nominatim](https://nominatim.openstreetmap.org) (© OpenStreetMap contributors, ODbL)
-* All HCM records in Elasticsearch are **synthetic** (`tools/generate_mock.py`)
+* All HCM records in Elasticsearch are **synthetic** (`tools/generate_mock.py`), including zero-dose flags and the `aefi-index-v1` AEFI cases. HCM does not capture AEFI yet.

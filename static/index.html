@@ -297,6 +297,12 @@ function vsPlan(cs = codes()) {
 function wastage(prod, cs = codes()) { const rs = D.wastage.filter(r => cs.has(r.code) && r.product === prod); return sum(rs, r => r.doses_wasted) / sum(rs, r => r.doses_opened); }
 function dqRate(cs = codes()) { const rs = D.dq.filter(r => cs.has(r.code)); return sum(rs, r => r.missing_gps + r.low_accuracy + r.outside_district + r.duplicates) / sum(rs, r => r.records); }
 function complaints(cs = codes()) { return D.complaints.filter(r => cs.has(r.code)); }
+function zdRows(cs = codes()) { return D.zero_dose.filter(r => cs.has(r.code) && (!F.mode || r.mode === F.mode)); }
+function zdShare(cs = codes()) { const rs = zdRows(cs); return sum(rs.filter(r => r.zd), r => r.n) / sum(rs, r => r.n); }
+function aefiRows(cs = codes()) { return D.aefi.filter(r => cs.has(r.code) && (!F.vaccine || r.product === F.vaccine || r.product === "MR+IPV")); }
+function aefiRate(cs = codes()) { return sum(aefiRows(cs), r => r.n) / sum(prods(), p => doses(p, cs)) * 1e5; }
+const SEV = { "Non-serious": "--s1", "Serious": "--critical" };
+const SYNTH = `<span class="pill" style="background:color-mix(in srgb, var(--warning) 25%, transparent)" title="HCM does not capture this yet - figures are synthetic">synthetic</span>`;
 function storesAtRisk(cs = codes()) { return new Set(D.stock.filter(r => r.level === 3 && cs.has(r.code) && /risk|Insufficient/.test(r.stock_status)).map(r => r.name)).size; }
 
 function covByDistrictChart(id) {
@@ -340,8 +346,20 @@ const R = {
         ${kpi("c2", "Records with GPS / duplicate issues", pct(dqRate(C), 1), status(dqRate(C), .03, .06, false))}
       </div>
       <div class="grid">
+        ${kpi("c2", "Zero-dose children reached " + SYNTH, fmt(sum(zdRows(C).filter(r => r.zd), r => r.n)), `<div class="t">No prior routine dose (card or recall)</div>`)}
+        ${kpi("c2", "Zero-dose share of children vaccinated", pct(zdShare(C), 1))}
+        ${kpi("c2", "AEFI reported " + SYNTH, fmt(sum(aefiRows(C), r => r.n)), `<div class="t">Adverse events following immunization</div>`)}
+        ${kpi("c2", "Serious AEFI", fmt(sum(aefiRows(C).filter(r => r.severity === "Serious"), r => r.n)))}
+        ${kpi("c2", "AEFI per 100,000 doses", aefiRate(C).toFixed(1))}
+        ${kpi("c2", "Serious AEFI investigated", (s => pct(sum(s.filter(r => r.investigation === "completed"), r => r.n) / sum(s, r => r.n)))(aefiRows(C).filter(r => r.severity === "Serious")))}
+      </div>
+      <div class="grid">
         ${card("c6", "ov-map-cov", `${F.vaccine ? PNAME[F.vaccine] : "MR"} coverage by district`, "Cumulative to date; click-free tooltips on hover", "map")}
         ${card("c6", "ov-map-ev", "Vaccination events (clustered)", "Every geotagged delivery, clustered; numbers are doses", "map")}
+      </div>
+      <div class="grid">
+        ${card("c6", "ov-map-zd", "Zero-dose children reached (clustered)", "Where children with no prior routine dose were found", "map")}
+        ${card("c6", "ov-aefi", "AEFI reported per day", "Synthetic until HCM captures AEFI")}
       </div>
       <div class="grid">
         ${card("c6", "ov-region", "Coverage by region")}
@@ -355,6 +373,8 @@ const R = {
         draw("ov-region", { tooltip: Object.assign(base().tooltip, pctTip), xAxis: axisCat(regs, 30), yAxis: axisVal(v => v * 100 + "%"),
           series: prods().map((p, i) => barS(PNAME[p], regs.map(r => { const cs = new Set(D.districts.filter(d => d.region === r && C.has(d.code)).map(d => d.code)); return +(doses(p, cs) / target(p, cs)).toFixed(4); }), i ? "--s2" : "--s1")) });
         plannedChart("ov-plan");
+        zdMap("ov-map-zd");
+        aefiDaily("ov-aefi");
       }];
   },
   Coverage() {
@@ -377,7 +397,21 @@ const R = {
       <div class="grid">
         ${card("c6", "cv-map-missed", "Missed / refused children", "Latest 4,000 events with GPS", "map")}
         ${card("c6", "cv-tbl", "Coverage summary by district", "", "table")}
-      </div>`,
+      </div>
+      <div class="grid">
+        ${card("c6", "cv-zd", "Zero-dose share of children vaccinated, by district", "No prior routine dose, by card or caregiver recall")}
+        ${card("c6", "cv-map-zd", "Zero-dose share by district", "", "map")}
+      </div>
+      <div class="grid">
+        ${card("c6", "cv-map-zdc", "Zero-dose children (clustered)", "Zoom in to find pockets for follow-up", "map")}
+        ${card("c6", "cv-map-aefi", "AEFI cases by severity", "Synthetic until HCM captures AEFI", "map")}
+      </div>
+      <div class="grid">
+        ${card("c4", "cv-aefi-sym", "AEFI by symptom and severity", "", "tall")}
+        ${card("c4", "cv-aefi-vac", "AEFI by suspected vaccine")}
+        ${card("c4", "cv-map-aefir", "AEFI per 100,000 doses", "", "map")}
+      </div>
+      <div class="grid">${card("c12", "cv-zd-tbl", "Zero-dose and AEFI by district", "", "table")}</div>`,
       () => {
         const C = codes();
         covByDistrictChart("cv-dist");
@@ -403,6 +437,26 @@ const R = {
         pointMap("cv-map-missed", D.missed.filter(p => prods().includes(p.product)), p => p.reason, reasonsList, p => `${esc(distName(p.code))} · ${PNAME[p.product]}<br>${esc(p.reason)}`);
         table("cv-tbl", [{ h: "District", k: "district", l: 1 }, { h: "Vaccine", k: "v", l: 1 }, { h: "Target", f: r => fmt(r.t) }, { h: "Given", f: r => fmt(r.g) }, { h: "Coverage", f: r => pct(r.g / r.t, 1) }, { h: "vs plan", f: r => pct(r.g / (r.t * D.coverage[0].days_elapsed / 11)) + " " + statusDot(r.g / (r.t * D.coverage[0].days_elapsed / 11)) }],
           ds.flatMap(d => prods().map(p => ({ district: d.district, v: PNAME[p], t: target(p, new Set([d.code])), g: doses(p, new Set([d.code])) }))));
+        const zs = ds.map(d => [d.district, zdShare(new Set([d.code]))]).sort((a, b) => b[1] - a[1]);
+        draw("cv-zd", { tooltip: Object.assign(base().tooltip, pctTip), legend: { show: false }, xAxis: axisCat(zs.map(z => z[0]), 60), yAxis: axisVal(v => (v * 100).toFixed(0) + "%"),
+          series: [barS("Zero-dose share", zs.map(z => +z[1].toFixed(4)), "--s2")] });
+        choro("cv-map-zd", c => zdShare(new Set([c])) * 100, "Zero-dose share", v => v.toFixed(1), "%");
+        zdMap("cv-map-zdc");
+        pointMap("cv-map-aefi", D.aefi_points.filter(p => !F.vaccine || p.product === F.vaccine || p.product === "MR+IPV"), p => p.severity, ["Non-serious", "Serious"],
+          p => `${esc(distName(p.code))} · ${esc(p.severity)}<br>${esc(p.symptom)} · ${esc(p.outcome)}`, 5);
+        const ar = aefiRows(C), syms = Object.entries(by(ar, r => r.symptom)).sort((a, b) => sum(a[1], r => r.n) - sum(b[1], r => r.n)).map(x => x[0]);
+        draw("cv-aefi-sym", { grid: { left: 8, right: 16, top: 36, bottom: 8, containLabel: true }, yAxis: axisCat(syms), xAxis: axisVal(),
+          series: Object.keys(SEV).map(sv => Object.assign(barS(sv, syms.map(y => sum(ar.filter(r => r.symptom === y && r.severity === sv), r => r.n)), SEV[sv], "a"))) });
+        const vac = Object.entries(by(ar, r => r.product)).map(([k, v]) => ({ name: k === "MR+IPV" ? "MR + fIPV (not attributable)" : PNAME[k], value: sum(v, r => r.n) }));
+        draw("cv-aefi-vac", { tooltip: { trigger: "item", backgroundColor: css("--card"), textStyle: { color: css("--ink") } }, legend: { bottom: 0, textStyle: { color: css("--ink-2") } },
+          series: [{ type: "pie", radius: ["38%", "65%"], top: -20, data: vac, label: { formatter: "{d}%", color: css("--ink-2") }, itemStyle: { borderColor: css("--card"), borderWidth: 2 },
+            color: [css("--s1"), css("--s2"), css("--s3")] }] });
+        choro("cv-map-aefir", c => aefiRate(new Set([c])), "AEFI per 100k doses", v => v.toFixed(0));
+        table("cv-zd-tbl", [{ h: "District", f: r => esc(r.d.district), l: 1 }, { h: "Children vaccinated", f: r => fmt(r.kids) }, { h: "Zero-dose", f: r => fmt(r.zd) }, { h: "Zero-dose share", f: r => pct(r.zd / r.kids, 1) },
+          { h: "AEFI", f: r => fmt(r.ae) }, { h: "Serious AEFI", f: r => r.ser ? `<b style="color:var(--critical)">${fmt(r.ser)}</b>` : "0" }, { h: "AEFI per 100k doses", f: r => r.rate.toFixed(1) }],
+          ds.map(d => { const one = new Set([d.code]), z = zdRows(one), a = aefiRows(one);
+            return { d, kids: sum(z, r => r.n), zd: sum(z.filter(r => r.zd), r => r.n), ae: sum(a, r => r.n), ser: sum(a.filter(r => r.severity === "Serious"), r => r.n), rate: aefiRate(one) }; })
+            .sort((a, b) => b.zd / b.kids - a.zd / a.kids));
       }];
   },
   Inventory() {
@@ -564,6 +618,16 @@ const R = {
   },
 };
 function statusDot(v) { const c = v >= .9 ? "--good" : v >= .75 ? "--warning" : "--critical"; return `<span class="dot" style="background:var(${c})" title="${v >= .9 ? "On track" : v >= .75 ? "Watch" : "At risk"}"></span>`; }
+function zdMap(id) {
+  const C = codes(), pts = D.zd_tiles.filter(t => C.has(t.code) && (!F.mode || t.mode === F.mode));
+  clusterMap(id, pts, p => p.n, css("--s2"), p => `${esc(distName(p.code))} · ${esc(p.mode)}<br>Zero-dose children: <b>${fmt(p.n)}</b>`);
+  document.getElementById(id + "-lg").innerHTML = `<span><span class="dot" style="background:var(--s2)"></span> Cluster label = zero-dose children; zoom in to split clusters</span>`;
+}
+function aefiDaily(id) {
+  const days = D.planned.map(p => p.d).slice(0, D.coverage[0].days_elapsed), ar = aefiRows();
+  draw(id, { xAxis: axisCat(days.map(d => d.slice(8) + " Nov")), yAxis: axisVal(),
+    series: Object.keys(SEV).map(sv => barS(sv, days.map(d => sum(ar.filter(r => r.d === d && r.severity === sv), r => r.n)), SEV[sv], "a")) });
+}
 function evMap(id) {
   const C = codes(), pts = D.tiles.filter(t => C.has(t.code) && prods().includes(t.product) && (!F.mode || t.mode === F.mode));
   clusterMap(id, pts, p => p.doses, css(F.vaccine === "IPV" ? "--s2" : "--s1"), p => `${esc(distName(p.code))} · ${esc(p.mode)}<br>${PNAME[p.product]}: <b>${fmt(p.doses)}</b> doses`);
@@ -639,7 +703,8 @@ function districtSummary() {
   const r4 = v => v == null || !isFinite(v) ? "" : +v.toFixed(4);
   const head = ["region", "district", "boundary_code", "mr_target", "mr_doses", "mr_coverage", "ipv_target", "ipv_doses", "ipv_coverage",
     "doses_vs_plan_to_date", "both_vaccines_9_59m", "mr_wastage", "ipv_wastage", "mr_days_of_stock", "ipv_days_of_stock", "mr_stock_status",
-    "gps_or_duplicate_issue_rate", "incomplete_registration_rate", "frontline_sync_rate", "downsync_rate", "checklist_completion", "complaints", "complaints_resolved"];
+    "gps_or_duplicate_issue_rate", "incomplete_registration_rate", "frontline_sync_rate", "downsync_rate", "checklist_completion", "complaints", "complaints_resolved",
+    "zero_dose_children", "zero_dose_share", "aefi_cases", "aefi_serious", "aefi_per_100k_doses"];
   const rows = D.districts.filter(d => C.has(d.code)).map(d => {
     const one = new Set([d.code]), q = dq[d.code], c = cp[d.code] || [], k = chk[d.district] || [];
     return [d.region, d.district, d.code, d.mr_target, doses("MR", one), r4(cov("MR", one)), d.ipv_target, doses("IPV", one), r4(cov("IPV", one)),
@@ -647,7 +712,9 @@ function districtSummary() {
       r4(st[d.code + "MR"]?.days_of_stock), r4(st[d.code + "IPV"]?.days_of_stock), st[d.code + "MR"]?.stock_status ?? "",
       r4((q.missing_gps + q.low_accuracy + q.outside_district + q.duplicates) / q.records), r4(q.incomplete / q.registrations),
       r4(fl[d.district] && fl[d.district].synced / fl[d.district].total), r4(dn[d.district] && dn[d.district].synced / dn[d.district].total),
-      r4(sum(k, x => x.submitted) / sum(k, x => x.expected)), sum(c, x => x.n), sum(c, x => x.resolved)];
+      r4(sum(k, x => x.submitted) / sum(k, x => x.expected)), sum(c, x => x.n), sum(c, x => x.resolved),
+      sum(zdRows(one).filter(x => x.zd), x => x.n), r4(zdShare(one)), sum(aefiRows(one), x => x.n),
+      sum(aefiRows(one).filter(x => x.severity === "Serious"), x => x.n), r4(aefiRate(one))];
   });
   return toCsv([[`# IPV-MR campaign snapshot ${D.generated} (day ${de} of 11), synthetic field data. Filters: ${filterLabel()}. Delivery-mode filter applies to doses only.`], head, ...rows]);
 }
@@ -731,7 +798,7 @@ async function start() {
   document.getElementById("fVaccine").value = F.vaccine; document.getElementById("fMode").value = F.mode;
   wireActions();
   wireTheme();
-  document.getElementById("foot").innerHTML = `Snapshot generated ${esc(D.generated)} from the Superset build (day ${D.coverage[0].days_elapsed} of 11). Field records are <b>synthetic</b>; targets from the IPV-MR microplan. District boundaries are approximate (geoBoundaries + OSM-derived). Map tiles © OpenStreetMap contributors. Live version: Superset 6.1 over HCM Elasticsearch.`;
+  document.getElementById("foot").innerHTML = `Snapshot generated ${esc(D.generated)} from the Superset build (day ${D.coverage[0].days_elapsed} of 11). Field records are <b>synthetic</b> (zero-dose and AEFI included - HCM does not capture AEFI yet); targets from the IPV-MR microplan. District boundaries are approximate (geoBoundaries + OSM-derived). Map tiles © OpenStreetMap contributors. Live version: Superset 6.1 over HCM Elasticsearch.`;
   render();
   window.addEventListener("resize", () => Object.values(charts).forEach(c => c.resize()));
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if (themeChoice() === "auto") render(); });

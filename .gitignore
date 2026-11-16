@@ -7,3 +7,4 @@ data/mock_progress.log
 *.xlsx
 *.xls
 .DS_Store
+!docs/HCM_Elastic_Plug-in_Sheet.xlsx

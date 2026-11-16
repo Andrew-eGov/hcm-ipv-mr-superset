@@ -86,6 +86,14 @@ def main():
                                  "round(latitude, 4) AS lat, round(longitude, 4) AS lon")
     out["complaint_points"] = ds(H.ds_points_complaints, "boundary_code AS code, complaint_type AS type, status, "
                                  "round(latitude, 4) AS lat, round(longitude, 4) AS lon")
+    out["zero_dose"] = ds(H.ds_zero_dose_daily, "event_date AS d, boundary_code AS code, delivery_mode AS mode, "
+                          "zero_dose AS zd, sum(children) AS n", group="1,2,3,4")
+    out["aefi"] = ds(H.ds_aefi_daily, "event_date AS d, boundary_code AS code, product, severity, symptom, outcome, "
+                     "investigation, sum(cases) AS n", group="1,2,3,4,5,6,7")
+    out["zd_tiles"] = ds(H.ds_map_zero_dose_tiles, "boundary_code AS code, delivery_mode AS mode, round(latitude, 4) AS lat, "
+                         "round(longitude, 4) AS lon, zd_children AS n")
+    out["aefi_points"] = ds(H.ds_points_aefi, "boundary_code AS code, product, severity, symptom, outcome, "
+                            "round(latitude, 4) AS lat, round(longitude, 4) AS lon")
     out["planned"] = q("SELECT campaign_date AS d, day_no, planned_cum_pct FROM microplan.public.dim_campaign_day ORDER BY 1")
 
     geo = json.load(open(ROOT / "data/districts.geojson"))

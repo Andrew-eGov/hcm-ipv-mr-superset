@@ -46,21 +46,23 @@ INDEXES = [
      "HCM PGR index."),
     ("I7", "Downsync events", "One document per user downsync", "downsync-index-v1",
      "If HCM has no downsync index, mark 'Not available in HCM' - only the downsync KPI is affected."),
+    ("I8", "AEFI cases", "One document per adverse event following immunization", "aefi-index-v1",
+     "HCM does not capture AEFI yet. Point this at the HCM AEFI / side-effect index once it exists, or at the national AEFI system export."),
 ]
 
 # id, index, field path (under Data.), ES type, format / allowed values, example, used by, notes
 FIELDS = [
     # common
-    ("F01", "All (I1-I7)", "boundaryHierarchyCode.district", "keyword", "District boundary code, exactly as in the microplan Boundary List", "NAMIBIA_NA_01_01_OMARURU",
+    ("F01", "All (I1-I8)", "boundaryHierarchyCode.district", "keyword", "District boundary code, exactly as in the microplan Boundary List", "NAMIBIA_NA_01_01_OMARURU",
      "All KPIs", "Joins every event to targets, region and district filters. Must match microplan codes 1:1."),
-    ("F02", "All (I1-I7)", "eventTime", "date", "Local event time (Namibia, UTC+2), ISO 8601", "2026-11-09T09:41:12",
+    ("F02", "All (I1-I8)", "eventTime", "date", "Local event time (Namibia, UTC+2), ISO 8601", "2026-11-09T09:41:12",
      "K03 K07 K08 K11 K12 K33 K34 K35 K38 K42", "Used for daily charts, days elapsed and off-hours checks. If HCM only has createdTime (epoch ms), say 'Needs transform'."),
-    ("F03", "All (I1-I7)", "createdBy", "keyword", "User UUID / id of the person who recorded it", "NAM-U-00431",
+    ("F03", "All (I1-I8)", "createdBy", "keyword", "User UUID / id of the person who recorded it", "NAM-U-00431",
      "K16 K17 K18 K34 K36", "Must match the user ids in the user list for sync-rate KPIs."),
-    ("F04", "I1 I2 I3 I5 I6", "geoPoint", "geo_point", "{lat, lon} geo_point mapping", '{"lat": -21.41, "lon": 15.95}',
+    ("F04", "I1 I2 I3 I5 I6 I8", "geoPoint", "geo_point", "{lat, lon} geo_point mapping", '{"lat": -21.41, "lon": 15.95}',
      "K14 K15 K30", "Needs ES mapping type geo_point for clustering and outside-district checks."),
-    ("F05", "I1 I5 I6", "latitude", "double", "Decimal degrees", "-21.417372", "K13 K28 K39 K44", "Separate numeric copy of the GPS point."),
-    ("F06", "I1 I5 I6", "longitude", "double", "Decimal degrees", "15.951404", "K13 K39 K44", ""),
+    ("F05", "I1 I5 I6 I8", "latitude", "double", "Decimal degrees", "-21.417372", "K13 K28 K39 K44 K54", "Separate numeric copy of the GPS point."),
+    ("F06", "I1 I5 I6 I8", "longitude", "double", "Decimal degrees", "15.951404", "K13 K39 K44 K54", ""),
     ("F07", "I1", "locationAccuracy", "float", "GPS accuracy in metres", "12.5", "K29", "Accuracy > 100 m is flagged."),
     ("F08", "I1", "createdTime", "long", "Epoch milliseconds", "1794200472000", "K13 K29", "Only used to sort map points newest first."),
     # task
@@ -113,6 +115,16 @@ FIELDS = [
     ("F80", "I6", "complaintType", "keyword", "Complaint category", "Household/child not visited", "K42 K44", ""),
     ("F81", "I6", "applicationStatus", "keyword", "PGR status - see sheet 4", "RESOLVED", "K40 K41 K42", ""),
     ("F82", "I6", "source", "keyword", "mobile / helpdesk", "helpdesk", "K42", "Optional."),
+    ("F24", "I1 I2", "zeroDose", "boolean", "true if the child had NO prior routine dose (WHO zero-dose), by card or caregiver recall", "false",
+     "K45 K46 K47", "Asked at registration. If HCM stores prior doses instead, 'Needs transform': zeroDose = no prior DTP1/MCV1."),
+    ("F25", "I2", "priorVaccinationSource", "keyword", "How prior status was established: CARD / RECALL / NONE", "CARD", "K45",
+     "Optional - documents the zero-dose evidence."),
+    ("F90", "I8", "severity", "keyword", "SERIOUS / NON_SERIOUS (WHO AEFI classification)", "NON_SERIOUS", "K48 K49 K50 K51 K52 K54", ""),
+    ("F91", "I8", "symptom", "keyword", "Main symptom - free list (fever, injection-site reaction, febrile seizure...)", "FEVER", "K52 K54", ""),
+    ("F92", "I8", "productCode", "keyword", "Suspected vaccine: MR / IPV / MR+IPV", "MR+IPV", "K53", "MR+IPV when the event cannot be attributed to one vaccine."),
+    ("F93", "I8", "outcome", "keyword", "RECOVERED / RECOVERING / REFERRED / HOSPITALISED", "RECOVERED", "K54", ""),
+    ("F94", "I8", "investigationStatus", "keyword", "COMPLETED / PENDING / NOT_REQUIRED (serious cases need an investigation)", "PENDING", "K51", ""),
+    ("F95", "I8", "individualId", "keyword", "Child id - links the AEFI to the vaccination record", "IND-3f2a9c1d0b7e44", "K53", "Optional but recommended."),
     ("F83", "I6", "resolutionHours", "float", "Hours from creation to resolution (empty if open)", "21.5", "K41", "Usually 'Needs transform': (resolved time - created time) in hours."),
 ]
 
@@ -150,6 +162,14 @@ CODES = [
     ("F81", "applicationStatus", "RESOLVED", "Resolved"),
     ("F81", "applicationStatus", "REJECTED", "Rejected"),
     ("F81", "applicationStatus", "PENDING_ASSIGNMENT / PENDING_AT_LME", "Open (any other status counts as open)"),
+    ("F24", "zeroDose", "true", "Child had no prior routine dose (zero-dose)"),
+    ("F24", "zeroDose", "false", "Child had at least one prior routine dose"),
+    ("F90", "severity", "SERIOUS", "Serious AEFI (hospitalisation, life-threatening, disability, death)"),
+    ("F90", "severity", "NON_SERIOUS", "Non-serious AEFI"),
+    ("F92", "productCode (AEFI)", "MR+IPV", "Suspected vaccine cannot be attributed to one of the two"),
+    ("F94", "investigationStatus", "COMPLETED", "Investigation completed"),
+    ("F94", "investigationStatus", "PENDING", "Investigation not yet completed"),
+    ("F94", "investigationStatus", "NOT_REQUIRED", "Non-serious case - no investigation needed"),
 ]
 
 # id, tab, KPI, definition, numerator, denominator, ES indexes, fields, microplan inputs, dataset
@@ -198,6 +218,16 @@ KPIS = [
     ("K42", "Complaints", "Complaints by type / status / day", "Counts", "-", "-", "I6", "F01 F02 F80 F81 F82", "-", "hcm_complaints_daily"),
     ("K43", "Complaints (map)", "Complaints per 10,000 MR doses", "Complaints ÷ MR doses × 10,000, per district", "Complaints", "MR doses", "I1 I6", "F01 F10 F11 F13", "-", "hcm_map_complaints"),
     ("K44", "Complaints (map)", "Complaint locations map", "Complaints as points", "-", "-", "I6", "F01 F05 F06 F80 F81", "-", "hcm_points_complaints"),
+    ("K45", "Overview / Coverage", "Zero-dose children reached", "Distinct vaccinated children with zeroDose = true", "Zero-dose children vaccinated", "-", "I1 I2", "F01 F11 F15 F24 F25", "-", "hcm_zero_dose_daily"),
+    ("K46", "Overview / Coverage", "Zero-dose share", "Zero-dose children ÷ all children vaccinated", "Zero-dose children", "Children vaccinated", "I1", "F01 F11 F15 F24", "-", "hcm_zero_dose_daily"),
+    ("K47", "Overview / Coverage (map)", "Zero-dose children map (clustered) and share by district", "Zero-dose children per map tile; share per district", "Zero-dose children", "Children vaccinated", "I1", "F01 F04 F11 F14 F15 F24", "district polygons", "hcm_map_zero_dose_tiles, hcm_map_coverage"),
+    ("K48", "Overview / Coverage", "AEFI reported", "Count of AEFI cases", "-", "-", "I8", "F01 F02 F90", "-", "hcm_aefi_daily"),
+    ("K49", "Overview / Coverage", "Serious AEFI", "Count where severity = SERIOUS", "-", "-", "I8", "F01 F02 F90", "-", "hcm_aefi_daily"),
+    ("K50", "Overview / Coverage (map)", "AEFI per 100,000 doses", "AEFI cases ÷ doses administered × 100,000, overall and by district", "AEFI cases", "Doses administered", "I8 I1", "F01 F90 F10 F11 F13", "-", "hcm_zero_dose_aefi_district, hcm_map_coverage"),
+    ("K51", "Overview", "Serious AEFI investigated", "Serious AEFI with investigation COMPLETED ÷ serious AEFI", "Investigated serious cases", "Serious cases", "I8", "F01 F90 F94", "-", "hcm_aefi_daily"),
+    ("K52", "Coverage", "AEFI by symptom and severity", "Counts", "-", "-", "I8", "F01 F90 F91", "-", "hcm_aefi_daily"),
+    ("K53", "Coverage", "AEFI by suspected vaccine", "Counts by MR / fIPV / not attributable", "-", "-", "I8", "F01 F92 F95", "-", "hcm_aefi_daily"),
+    ("K54", "Coverage (map)", "AEFI cases map", "AEFI cases as points coloured by severity", "-", "-", "I8", "F01 F05 F06 F90 F91 F93", "-", "hcm_points_aefi"),
 ]
 
 CONNECTION = [
@@ -220,7 +250,7 @@ CONNECTION = [
 
 CHECKLIST = [
     ("Fill sheet 1 (Connection) - except the password", "Colleague", "Sheet 1"),
-    ("Fill sheet 2 (Indexes): real index name for I1-I7", "Colleague", "Sheet 2"),
+    ("Fill sheet 2 (Indexes): real index name for I1-I8 (I8 AEFI may come from outside HCM)", "Colleague", "Sheet 2"),
     ("Edit trino/catalog/hcm.properties on the server, then: docker compose restart trino", "Colleague", "README → Going live"),
     ("Check Trino sees the indexes: docker compose exec trino trino --execute \"SHOW TABLES FROM hcm.default\"", "Colleague", "Every real index from sheet 2 should be listed"),
     ("Look at one real document per index (query in sheet 2, column G) and fill sheet 3 (Fields)", "Colleague", "Sheet 3"),
@@ -316,7 +346,7 @@ def main():
         ("Status", "Pick from the dropdown: Not started · Mapped - same name · Mapped - different name · Needs transform · Not available in HCM."),
         ("", ""),
         ("Progress", ""),
-        ("Indexes mapped", "=COUNTIF('2 Indexes'!$H$6:$H$12,\"Mapped*\")&\" of \"&COUNTA('2 Indexes'!$A$6:$A$12)"),
+        ("Indexes mapped", "=COUNTIF('2 Indexes'!$H$6:$H$13,\"Mapped*\")&\" of \"&COUNTA('2 Indexes'!$A$6:$A$13)"),
         ("Fields mapped", "=COUNTIF('3 Fields'!$K$6:$K$100,\"Mapped*\")&\" of \"&COUNTA('3 Fields'!$A$6:$A$100)"),
         ("Fields needing a transform", "=COUNTIF('3 Fields'!$K$6:$K$100,\"Needs transform\")"),
         ("Fields not available in HCM", "=COUNTIF('3 Fields'!$K$6:$K$100,\"Not available in HCM\")"),
@@ -378,8 +408,8 @@ def main():
         body(ws, i, 7, f'=IF(E{i}="","",CONCATENATE("SELECT * FROM hcm.default.""",E{i},""" LIMIT 5"))')
         body(ws, i, 8, "Not started", fill=FILL_IN)
         body(ws, i, 9, note)
-    status_validation(ws, "H6:H12")
-    status_colors(ws, "H6:H12", "H", 6)
+    status_validation(ws, "H6:H13")
+    status_colors(ws, "H6:H13", "H", 6)
     widths(ws, [6, 22, 40, 28, 32, 14, 52, 24, 60])
     ws.freeze_panes = "C6"
 

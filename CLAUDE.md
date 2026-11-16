@@ -12,7 +12,7 @@ Superset 6.1 dashboard for the DIGIT HCM **Namibia IPV + MR integrated campaign*
   2. Apply its mappings to `tools/hcm_datasets.py`.
   3. Load real ids into the microplan tables.
   4. Rebuild and spot-check against HCM reports.
-- **Not started (deferred by the product owner):** row-level security per region or district, AEFI tracking, production hosting (an 8 GB VM with HTTPS).
+- **Not started (deferred by the product owner):** row-level security per region or district, production hosting (an 8 GB VM with HTTPS).
 
 ## How the pieces fit
 
@@ -41,6 +41,8 @@ These came from the product owner or from the microplan. Change them only after 
 - **Vial sizes:** MR 10 doses; fIPV 25 fractional doses per vial (assumed). Both live in `dim_product`.
 - **Delivery modes:** fixed health-facility team → Fixed post; mobile/outreach → House to house; temporary fixed → Transit post (the owner wrote "transfer post").
 - **District shapes are approximate.** Each geoBoundaries region is split into Voronoi cells around the district seat towns. Official shapes, when they exist, replace `data/districts.geojson`.
+- **Zero-dose** = no prior routine dose by card or caregiver recall (WHO), captured as a yes/no `zeroDose` flag at registration. Shown as children reached and as a share of children vaccinated.
+- **AEFI** come from their own index (`aefi-index-v1`, one document per case), reported per 100,000 doses with serious and non-serious separated. HCM has no AEFI source yet, so these figures are synthetic and labelled as such on both dashboards. The real source (an HCM index or the national AEFI system) is still to be decided.
 - **Mock-only items:** store coordinates (placed at district seat towns) and user ids (`NAM-U-xxxxx`). Warehouse sync means "stores with at least one stock transaction", because the user list has no warehouse managers.
 
 ## Data handling
@@ -51,6 +53,7 @@ These came from the product owner or from the microplan. Change them only after 
 
 ## Working agreements
 
+- Run `./setup.sh` (or `./setup.sh --no-mock` once real ES is configured) for a full idempotent rebuild of the stack, microplan, data and dashboard. `START_HERE.md` is the human-facing hand-over.
 - After changing datasets or charts, rebuild with `tools/build_superset.py`, then open every tab at http://localhost:8088/superset/dashboard/hcm-ipv-mr-namibia/ (local login `admin`/`admin`) and confirm each chart shows data.
 - After changing `static/`, re-export with `tools/export_static.py` if the data changed. Check the page locally, then deploy from a copy of `static/` with `npx vercel@65.11.0 deploy --prod`.
 - Regenerate the plug-in workbook with `tools/build_plug_sheet.py` whenever a dataset gains or drops an ES field, so the workbook and the code list the same fields.
