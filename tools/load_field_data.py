@@ -64,7 +64,7 @@ CHILD_FIELDS = dict(child_id=KW, event_date={"type": "date"}, campaign_day=INT, 
                     vaccine_status=KW, gender=KW, gender_synthetic=INT)
 
 
-SYNC_FIELDS = dict(user_id=KW, role_group=KW, boundary_code=KW, synced=INT, downsynced=INT,
+SYNC_FIELDS = dict(user_id=KW, role_group=KW, boundary_code=KW, district=KW, synced=INT, downsynced=INT,
                    last_sync_date={"type": "date"}, synthetic=INT)
 
 
@@ -72,17 +72,35 @@ def unit(key):
     return int(hashlib.sha256(key.encode()).hexdigest()[:8], 16) / 0xFFFFFFFF
 
 
-def synthetic_sync(cur):
+def synthetic_sync(cur, sites):
     """The field database has no app sync data. Until HCM is connected, every frontline user in the
     microplan gets a stable synthetic sync status (about 93% synced, about 86% of vaccinators
-    downsynced), flagged synthetic = 1, so the Data Quality sync charts keep working."""
-    cur.execute("SELECT user_id, role_group, boundary_code FROM dim_user WHERE role_group IN ('VACCINATOR', 'REGISTRAR')")
+    downsynced), flagged synthetic = 1, so the Data Quality sync charts keep working.
+    The microplan puts every Zambezi user in Katima Mulilo; those users are spread over the three
+    field districts in proportion to each district's number of sites."""
+    shares = {}
+    for s in sites:
+        shares[s["district"]] = shares.get(s["district"], 0) + 1
+    names, total = sorted(shares), len(sites)
+
+    def field_district(uid):
+        x, acc = unit(f"district-20261109-{uid}") * total, 0
+        for d in names:
+            acc += shares[d]
+            if x < acc:
+                return d
+        return names[-1]
+
+    cur.execute("SELECT user_id, role_group, boundary_code, region, district FROM dim_user "
+                "WHERE role_group IN ('VACCINATOR', 'REGISTRAR')")
     docs = []
-    for uid, role, bcode in cur.fetchall():
+    for uid, role, bcode, region, district in cur.fetchall():
+        if region == REGION:
+            district = field_district(uid)
         synced = int(unit(f"sync-20261109-{uid}") < 0.93)
         down = int(role == "VACCINATOR" and unit(f"downsync-20261109-{uid}") < 0.86)
         last = f"2026-11-{10 + int(unit(f'day-{uid}') * 2):02d}" if synced else None
-        docs.append((uid, dict(user_id=uid, role_group=role, boundary_code=bcode, synced=synced, downsynced=down,
+        docs.append((uid, dict(user_id=uid, role_group=role, boundary_code=bcode, district=district, synced=synced, downsynced=down,
                                last_sync_date=last, synthetic=1)))
     return docs
 
@@ -230,7 +248,7 @@ def main():
 
     sites = load_sites()
     conn = psycopg2.connect(**PG)
-    sync = synthetic_sync(conn.cursor())
+    sync = synthetic_sync(conn.cursor(), sites)
     recreate(SYNC_IDX, SYNC_FIELDS, sync)
     unknown = {d["site_code"] for d in site_docs.values()} - {s["site_code"] for s in sites}
     if unknown:

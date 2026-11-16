@@ -193,13 +193,13 @@ def ds_sync():
     """App sync per frontline user (SYNTHETIC until HCM is connected), for districts that uploaded field data:
     'Frontline workers' = vaccinators and registrars who synced at least once; 'Vaccinators downsynced'."""
     return f"""
-SELECT u.region, u.district, 'Frontline workers' AS user_group, u.user_id AS entity_id, y.synced, y.synthetic
+SELECT u.region, y.district, 'Frontline workers' AS user_group, u.user_id AS entity_id, y.synced, y.synthetic
 FROM {SYNC} y JOIN {MP}.dim_user u ON u.user_id = y.user_id
-WHERE u.district IN (SELECT DISTINCT district FROM {MP}.dim_site)
+WHERE y.district IN (SELECT DISTINCT district FROM {MP}.dim_site)
 UNION ALL
-SELECT u.region, u.district, 'Vaccinators downsynced', u.user_id, y.downsynced, y.synthetic
+SELECT u.region, y.district, 'Vaccinators downsynced', u.user_id, y.downsynced, y.synthetic
 FROM {SYNC} y JOIN {MP}.dim_user u ON u.user_id = y.user_id
-WHERE y.role_group = 'VACCINATOR' AND u.district IN (SELECT DISTINCT district FROM {MP}.dim_site)"""
+WHERE y.role_group = 'VACCINATOR' AND y.district IN (SELECT DISTINCT district FROM {MP}.dim_site)"""
 
 
 DATASETS = {
