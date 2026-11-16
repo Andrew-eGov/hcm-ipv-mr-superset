@@ -360,7 +360,7 @@ R.Coverage = () => [
   `<div class="grid">${card("c6", "cvReg", "Coverage by region (MR and IPV)")}${card("c6", "cvDist", "Coverage by district (MR and IPV)")}</div>`,
   `<div class="grid">${prods().map(p => card("c6", `cvAge${p}`, `${p}: children vaccinated by age group`, "Age groups as recorded in the field database")).join("")}</div>`,
   `<div class="grid">${card("c6", "cvClu", "Coverage by cluster (MR and IPV)")}${card("c6", "cvSite", "Coverage by site (MR and IPV)")}</div>`,
-  `<div class="grid">${card("c6", "cvPlan", "Planned vs actual, cumulative (reporting sites)")}${card("c6", "cvDay", "Children vaccinated per day")}</div>`,
+  `<div class="grid">${card("c6", "cvPlan", "Planned vs actual, cumulative (reporting sites)", "Dotted line = planned (target) · solid filled line = actual (vaccinated)")}${card("c6", "cvDay", "Children vaccinated per day")}</div>`,
   `<div class="grid">${card("c6", "cvStat", "Children by vaccines received")}${card("c6", "cvCluN", "Children vaccinated by cluster")}</div>`,
   `<div class="grid">${card("c12", "cvTbl", "Coverage summary by site", "", "table")}</div>`,
   () => {
@@ -371,9 +371,13 @@ R.Coverage = () => [
     covBars("cvClu", s => s.cluster); covBars("cvSite", s => s.name, 40);
     const ds = uniq(rows(null).map(r => r.d)).sort();
     draw("cvPlan", { tooltip: Object.assign(base().tooltip, { axisPointer: { type: "line" } }), xAxis: axisCat(ds.map(dlabel)), yAxis: axisVal(),
+      // legend without a fixed icon, so each entry shows its own line style (dotted planned, solid filled actual)
+      legend: { top: 0, left: 0, itemWidth: 34, itemHeight: 12, textStyle: { color: css("--ink-2") } },
       series: prods().flatMap(p => { let a = 0, b = 0; const rs = rows(p);
-        return [{ name: `${p} planned (target)`, type: "line", lineStyle: { type: "dashed" }, itemStyle: { color: css(VCOL[p]) }, data: ds.map(d => (a += tgt(rs.filter(r => r.d === d)))) },
-                { name: `${p} vaccinated`, type: "line", itemStyle: { color: css(VCOL[p]) }, data: ds.map(d => (b += vac(rs.filter(r => r.d === d)))) }]; }) });
+        return [{ name: `${p} planned (target)`, type: "line", symbol: "none", lineStyle: { type: "dotted", width: 2.5, color: css(VCOL[p]) }, itemStyle: { color: css(VCOL[p]) },
+                  data: ds.map(d => (a += tgt(rs.filter(r => r.d === d)))) },
+                { name: `${p} vaccinated (actual)`, type: "line", symbol: "circle", symbolSize: 7, lineStyle: { type: "solid", width: 3.5, color: css(VCOL[p]) }, itemStyle: { color: css(VCOL[p]) },
+                  areaStyle: { color: css(VCOL[p]), opacity: 0.15 }, data: ds.map(d => (b += vac(rs.filter(r => r.d === d)))) }]; }) });
     draw("cvDay", { xAxis: axisCat(ds.map(dlabel)), yAxis: axisVal(), series: prods().map(p => barS(p, ds.map(d => vac(rows(p).filter(r => r.d === d))), VCOL[p])) });
     const st = by(D.status.filter(r => siteOk(S(r.code)) && dateOk(r.d)), r => r.s);
     simplePie("cvStat", Object.entries(st).map(([k, v]) => ({ name: k, value: sum(v, r => r.n) })).sort((a, b) => b.value - a.value), ["--s1", "--s2", "--s3", "--s4"].map(css));

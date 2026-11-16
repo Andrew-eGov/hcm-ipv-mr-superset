@@ -355,9 +355,17 @@ def define(days_remaining):
         filters=[TIME_F()])
     bar(T, 4, 6, "Coverage by site (MR and IPV)", "field_site_day", "site_name", [COVERAGE], ["product_label"], fmt=".0%",
         filters=[TIME_F()], values=False)
-    line(T, 5, 6, "Coverage: planned vs actual, cumulative (reporting sites)", "field_site_day",
-         [M("SUM(target)", "Planned (target)"), M("SUM(vaccinated)", "Vaccinated")], ["product_label"],
-         rolling_type="cumsum")
+    # Mixed chart so the two series look different: actual = filled area, planned = line with dot markers;
+    # Superset's line chart has no dashed-line option.
+    chart(T, 5, 6, 50, "Coverage: planned (line with dots) vs actual (filled), cumulative", "field_site_day",
+          "mixed_timeseries", x_axis="event_date", time_grain_sqla="P1D",
+          metrics=[M("SUM(vaccinated)", "Actual (vaccinated)")], groupby=["product_label"], adhoc_filters=[TIME_F()],
+          seriesType="line", area=True, opacity=0.25, markerEnabled=False, rolling_type="cumsum",
+          metrics_b=[M("SUM(target)", "Planned (target)")], groupby_b=["product_label"], adhoc_filters_b=[TIME_F()],
+          seriesTypeB="line", areaB=False, markerEnabledB=True, markerSizeB=9, rolling_type_b="cumsum",
+          yAxisIndex=0, yAxisIndexB=0, show_legend=True, legendOrientation="top", rich_tooltip=True,
+          x_axis_time_format="%d %b", y_axis_format="SMART_NUMBER", color_scheme="supersetColors",
+          row_limit=10000, row_limit_b=10000, zoomable=False)
     bar(T, 5, 6, "Coverage: children vaccinated per day", "field_site_day", "event_date",
         [M("SUM(vaccinated)", "Children vaccinated")], ["product_label"], temporal=True)
     pie(T, 6, 6, "Coverage: children by vaccines received", "field_child_status", "vaccine_status",
