@@ -230,12 +230,14 @@ def handlebars(tab, row, width, name, ds, metrics, template, filters=(), height=
 
 
 
-COVERAGE_BREAKS = ["0", "50", "70", "80", "90", "100", "200"]   # same legend on every coverage map
+# Same legend on every coverage map, red (low) > amber (mid) > green (high):
+# <50 red, 50-70 orange, 70-80 amber, 80-90 light green, 90-100 green, 100+ dark green
+COVERAGE_BREAKS = ["0", "50", "70", "80", "90", "100", "200"]
 
 
 def choropleth(tab, row, width, name, ds, metric, height=60, legend=".0f", tooltip=("region",), viewport=VIEWPORT,
-               scheme="schemeGreens", breaks=COVERAGE_BREAKS):
-    """Single sequential colour scale with a legend. Areas with no uploaded data stay uncoloured."""
+               scheme="schemeRdYlGn", breaks=COVERAGE_BREAKS):
+    """Red-amber-green coverage scale with a legend. Areas with no uploaded data stay uncoloured."""
     chart(tab, row, width, height, name, ds, "deck_polygon",
           line_column="polygon", line_type="json", metric=metric, adhoc_filters=[],
           point_radius_fixed={"type": "fix", "value": 1000}, filled=True, stroked=True, extruded=False,

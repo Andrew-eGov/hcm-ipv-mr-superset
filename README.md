@@ -19,7 +19,7 @@ Postgres "microplan" ──► Trino (postgresql) ────────┴─
 
 * **Real time with no ETL inside Superset.** Charts query ES through Trino; the field indexes are small, so plain scans return in about a second.
 * **Joins happen in Trino.** ES rows join to `dim_site` (site → cluster → district → region, facility type, coordinates) and `dim_product` (doses per vial, allowed wastage).
-* **Maps show Namibia only.** Superset maps use a transparent basemap, so only Namibia's region and district shapes are drawn; the review page masks everything outside Namibia. Coverage maps share one sequential scale with a legend.
+* **Maps show Namibia only.** Superset maps use a transparent basemap, so only Namibia's region and district shapes are drawn; the review page masks everything outside Namibia. Coverage maps share one red-amber-green scale with a legend (<50% red, 70–80% amber, 90%+ green).
 
 ## Tabs
 
