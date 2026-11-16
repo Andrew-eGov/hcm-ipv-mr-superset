@@ -511,7 +511,7 @@ function toast(msg) {
   document.body.appendChild(t); setTimeout(() => t.remove(), 2600);
 }
 function filterLabel() {
-  return [F.site || F.cluster || F.district || F.region || "All areas", F.vaccine || "MR + IPV", F.date ? dlabel(F.date) : "All dates"].join(" · ");
+  return [F.site || F.cluster || F.district || F.region || "All areas", F.vaccine || "MR + IPV", F.date ? dlabel(F.date) : "All dates with data"].join(" · ");
 }
 async function share() {
   const url = shareUrl(), title = `IPV-MR dashboard – ${active} (${filterLabel()})`;
@@ -597,7 +597,8 @@ function fillSelects() {
   F.cluster = opt("fCluster", "All clusters", uniq(ss.filter(s => (!F.region || s.region === F.region) && (!F.district || s.district === F.district)).map(s => s.cluster)).sort(), F.cluster);
   F.site = opt("fSite", "All sites", ss.filter(s => siteOk(s, "site")).map(s => s.name).sort(), F.site);
   const ds = uniq(D.site_day.map(r => r.d)).sort(), fd = document.getElementById("fDate");
-  fd.innerHTML = `<option value="">All dates</option>` + ds.map(d => `<option value="${d}">${dlabel(d)} (day ${dayNo(d)})</option>`).join(""); fd.value = F.date;
+  // Only dates with field data can be picked; the default is all of them (preselected)
+  fd.innerHTML = `<option value="">${dlabel(ds[0])} – ${dlabel(ds[ds.length - 1])} (all dates with data)</option>` + ds.map(d => `<option value="${d}">${dlabel(d)} (day ${dayNo(d)})</option>`).join(""); fd.value = F.date;
   document.getElementById("fVaccine").value = F.vaccine;
 }
 // ---------------------------------------------------------------- theme (light default, dark, or follow device)

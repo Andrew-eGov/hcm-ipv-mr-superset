@@ -133,6 +133,18 @@ def campaign_days_remaining():
     return day, CAMPAIGN_DAYS - day
 
 
+def data_date_range():
+    """First and last date with field data, as a Superset time range (end is exclusive)."""
+    import datetime as dt
+    sql = "SELECT min(CAST(event_date AS date)) AS d0, max(CAST(event_date AS date)) AS d1 FROM hcm.default.\"field-site-day-v1\""
+    r = api("POST", "/api/v1/sqllab/execute/", json={"database_id": ensure_db(), "sql": sql, "schema": "default", "runAsync": False})
+    d0, d1 = (dt.date.fromisoformat(str(r["data"][0][k])[:10]) for k in ("d0", "d1"))
+    return d0, d1, f"{d0.isoformat()} : {(d1 + dt.timedelta(days=1)).isoformat()}"
+
+
+DATE_RANGE = None   # set in main(): the campaign-date filter is preselected to the dates that have data
+
+
 # ------------------------------------------------------------------ chart helpers
 def M(sql, label):
     return {"expressionType": "SQL", "sqlExpression": sql, "label": label, "hasCustomLabel": True,
@@ -565,8 +577,11 @@ def native_filters(ds_ids, ds_cols):
         select("NATIVE_FILTER-product", "Vaccine", "product",
                desc="MR + IPV when empty; pick MR or IPV to show one vaccine"),
         {"id": "NATIVE_FILTER-date", "name": "Campaign date", "filterType": "filter_time", "type": "NATIVE_FILTER",
-         "targets": [{}], "controlValues": {}, "description": "Applies to daily charts and totals; maps are cumulative.",
-         "defaultDataMask": {"extraFormData": {}, "filterState": {}, "ownState": {}}, "cascadeParentIds": [],
+         "targets": [{}], "controlValues": {"enableEmptyFilter": True},
+         "description": f"Preselected to the dates with field data ({DATE_RANGE[0]:%d %b} - {DATE_RANGE[1]:%d %b %Y}). "
+                        "Applies to daily charts and totals; maps are cumulative.",
+         "defaultDataMask": {"extraFormData": {"time_range": DATE_RANGE[2]}, "filterState": {"value": DATE_RANGE[2]},
+                             "ownState": {}}, "cascadeParentIds": [],
          "scope": tsc, "chartsInScope": tins, "tabsInScope": []},
     ]
 
@@ -603,6 +618,8 @@ def main():
     print("teardown"); teardown()
     db = ensure_db(); print("database", db)
     ds_ids, ds_cols = create_datasets(db)
+    global DATE_RANGE
+    DATE_RANGE = data_date_range()
     day, remaining = campaign_days_remaining()
     print(f"latest campaign day {day}, {remaining} days remaining")
     define(remaining)
