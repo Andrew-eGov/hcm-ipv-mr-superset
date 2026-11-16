@@ -198,7 +198,7 @@ function rows(p, opts = {}) {   // site-day rows for vaccine p (or both) under t
 const vac = rs => sum(rs, r => r.vac), tgt = rs => sum(rs, r => r.target);
 const cov = rs => vac(rs) / tgt(rs);
 const dosesOpened = rs => sum(rs, r => r.opened * r.dpv);
-const waste = rs => (dosesOpened(rs) - vac(rs)) / dosesOpened(rs);
+const waste = rs => { const d = dosesOpened(rs); return d ? Math.max(0, (d - vac(rs)) / d) : NaN; };   // never below 0% (owner's instruction)
 const net = r => (r.rec || 0) + (r.add || 0) - (r.ret || 0);
 const need = r => r.target / r.dpv * (1 + WASTE_OK);
 const unbalanced = r => (r.rec || 0) + (r.add || 0) - (r.opened || 0) - (r.ret || 0);
@@ -217,9 +217,7 @@ function status(v, good, warn, higherBetter = true) {
   const [c, l, i] = ok ? ["--good", "On track", "✓"] : mid ? ["--warning", "Watch", "!"] : ["--critical", "At risk", "✕"];
   return `<span class="st"><span class="dot" style="background:var(${c})"></span>${i} ${l}</span>`;
 }
-function wstatus(v) {   // negative wastage = more children than doses in opened vials: a data problem, not a success
-  return v < 0 ? `<span class="st"><span class="dot" style="background:var(--warning)"></span>! Check data: more children than doses</span>` : status(v, .05, .1, false);
-}
+function wstatus(v) { return status(v, .05, .1, false); }
 function kpi(cls, title, value, extra = "", barFrac = null, barColor = "--s1") {
   const bar = barFrac == null ? "" : `<div class="bar"><i style="width:${Math.min(100, barFrac * 100)}%;background:var(${barColor})"></i></div>`;
   return `<div class="card k ${cls}"><div class="t">${title}</div><div class="v">${value}</div>${bar}${extra}</div>`;
@@ -340,7 +338,7 @@ R.Overview = () => {
     kpi("c2", `${p}: sites reporting`, fmt(uniq(rs.map(r => r.code)).length)),
   ].join("")}</div>`; };
   return [
-    `<div class="grid"><div class="card c12 banner">Field data: Zambezi region child and stock database (Bukalo, Katima and Sangwali clusters, 23 sites). MR and IPV are always shown separately. <b>Target</b> = children planned for the sites and days that uploaded data, so coverage is never compared with the national plan. <b>Wastage</b> = (doses in opened vials − children vaccinated) ÷ doses in opened vials; MR 5 and IPV 10 doses per vial.</div></div>`,
+    `<div class="grid"><div class="card c12 banner">Field data: Zambezi region child and stock database (Bukalo, Katima and Sangwali clusters, 23 sites). MR and IPV are always shown separately. <b>Target</b> = children planned for the sites and days that uploaded data, so coverage is never compared with the national plan. <b>Wastage</b> = (doses in opened vials − children vaccinated) ÷ doses in opened vials, never below 0%; MR 5 and IPV 10 doses per vial.</div></div>`,
     prods().map(vkpis).join(""),
     `<div class="grid">${prods().map(p => card("c6", `ovPie${p}`, `${p}: vaccinated vs remaining to target`)).join("")}</div>`,
     `<div class="grid">${card("c6", "ovReg", "Coverage by region (MR and IPV)")}${card("c6", "ovDist", "Coverage by district (MR and IPV)")}</div>`,

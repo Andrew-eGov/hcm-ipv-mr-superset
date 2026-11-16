@@ -292,7 +292,8 @@ MR = [F("product", "IN", ["MR"])]
 IPV = [F("product", "IN", ["IPV"])]
 VACCINES = (("MR", MR), ("IPV", IPV))
 COVERAGE = M(PCT("SUM(vaccinated)", "SUM(target)"), "Coverage of target")
-WASTAGE = M(PCT("SUM(doses_opened) - SUM(vaccinated)", "SUM(doses_opened)"), "Wastage")
+# Wastage never shows below 0% (owner's instruction): more children than doses in opened vials counts as 0%.
+WASTAGE = M(f"GREATEST(CAST(0 AS double), {PCT('SUM(doses_opened) - SUM(vaccinated)', 'SUM(doses_opened)')})", "Wastage")
 
 BANNER = """<div style="padding:4px 2px;font-family:Inter,Roboto,sans-serif;line-height:1.5">
 <span style="font-size:13px;opacity:.8">Namibia · NAM-09-01-IPV-MR_NID · Round 1 · 9-19 Nov 2026 (11 days)</span><br/>
@@ -306,7 +307,7 @@ def define(days_remaining):
         "Field data: Zambezi region child and stock database (Bukalo, Katima and Sangwali clusters, 23 sites). "
         "MR and IPV are always reported separately. Target = children planned for the sites and days that uploaded "
         "data, so coverage is never compared with the national plan. Wastage = (doses in opened vials - children "
-        "vaccinated) / doses in opened vials; MR 5 and IPV 10 doses per vial. Gender is synthetic: the field database does not record it yet.")))
+        "vaccinated) / doses in opened vials, never below 0%; MR 5 and IPV 10 doses per vial. Gender is synthetic: the field database does not record it yet.")))
     for v, f in VACCINES:
         r = f"1{v}"
         big(T, r, 2, f"Overview: {v} children vaccinated", "field_site_day", M("SUM(vaccinated)", "Vaccinated"),
@@ -411,10 +412,9 @@ def define(days_remaining):
         sort_by_metric=False, x_axis_sort="Days of stock", x_axis_sort_asc=True,
         lines=[LINE_AT(days_remaining, f"Campaign days remaining ({days_remaining})")], values=False)
     bar(T, 4, 6, "Inventory: wastage % by district (allowed 5%)", "field_site_day", "district", [WASTAGE],
-        ["product_label"], fmt=".1%", filters=[TIME_F()], lines=[LINE_AT(0.05, "Allowed 5%")], y_min=None)
+        ["product_label"], fmt=".1%", filters=[TIME_F()], lines=[LINE_AT(0.05, "Allowed 5%")])
     bar(T, 5, 12, "Inventory: wastage % by site (allowed 5%)", "field_site_day", "site_name", [WASTAGE],
-        ["product_label"], fmt=".1%", filters=[TIME_F()], lines=[LINE_AT(0.05, "Allowed 5%")], height=50, values=False,
-        y_min=None)
+        ["product_label"], fmt=".1%", filters=[TIME_F()], lines=[LINE_AT(0.05, "Allowed 5%")], height=50, values=False)
     for v, f in VACCINES:
         bar(T, 6, 6, f"Inventory: {v} cumulative vials issued (net) vs vials needed, by site", "field_site_day", "site_name",
             [M("SUM(vials_issued_net)", "Vials issued (net)"), M("ROUND(SUM(vials_needed), 1)", "Vials needed")],
