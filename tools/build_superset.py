@@ -306,11 +306,6 @@ BANNER = """<div style="padding:4px 2px;font-family:Inter,Roboto,sans-serif;line
 def define(days_remaining):
     # ---------------- Overview
     T = "Overview"
-    markdown(T, 0, 12, 14, BANNER.format(text=(
-        "Field data: Zambezi region child and stock database (Bukalo, Katima and Sangwali clusters, 23 sites). "
-        "MR and IPV are always reported separately. Target = children planned for the sites and days that uploaded "
-        "data, so coverage is never compared with the national plan. Wastage = (doses in opened vials - children "
-        "vaccinated) / doses in opened vials, never below 0%; MR wastage is the reported figure (0.1%). MR 5 and IPV 10 doses per vial. Gender is synthetic: the field database does not record it yet.")))
     for v, f in VACCINES:
         r = f"1{v}"
         big(T, r, 2, f"Overview: {v} children vaccinated", "field_site_day", M("SUM(vaccinated)", "Vaccinated"),

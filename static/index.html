@@ -339,7 +339,6 @@ R.Overview = () => {
     kpi("c2", `${p}: sites reporting`, fmt(uniq(rs.map(r => r.code)).length)),
   ].join("")}</div>`; };
   return [
-    `<div class="grid"><div class="card c12 banner">Field data: Zambezi region child and stock database (Bukalo, Katima and Sangwali clusters, 23 sites). MR and IPV are always shown separately. <b>Target</b> = children planned for the sites and days that uploaded data, so coverage is never compared with the national plan. <b>Wastage</b> = (doses in opened vials − children vaccinated) ÷ doses in opened vials, never below 0%; MR wastage is the reported figure (0.1%). MR 5 and IPV 10 doses per vial.</div></div>`,
     prods().map(vkpis).join(""),
     `<div class="grid">${prods().map(p => card("c6", `ovPie${p}`, `${p}: vaccinated vs remaining to target`)).join("")}</div>`,
     `<div class="grid">${card("c6", "ovReg", "Coverage by region (MR and IPV)")}${card("c6", "ovDist", "Coverage by district (MR and IPV)")}</div>`,
