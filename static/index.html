@@ -405,8 +405,8 @@ R.Inventory = () => {
     `<div class="grid">${prods().map(p => `<div class="card c6"><div class="hb">${p}: ${fmt1(stockDays(p).days)} days of stock · Day ${day} of ${D.campaign_days}</div><p class="note">Vials in hand in the district store ÷ average daily vials opened (last 3 days). The red line in the chart below marks the ${left} campaign days remaining.</p></div>`).join("")}</div>`,
     `<div class="grid">${card("c6", "ivDos", "Days of stock left by site")}${card("c6", "ivWD", "Wastage % by district (allowed 5%)")}</div>`,
     `<div class="grid">${card("c12", "ivWS", "Wastage % by site (allowed 5%)")}</div>`,
-    `<div class="grid">${prods().map(p => card("c6", `ivCum${p}`, `${p}: cumulative vials issued (net) vs vials needed, by site`, "Red bars: sites below the vials needed (target ÷ doses per vial × 1.05)")).join("")}</div>`,
-    `<div class="grid">${card("c12", "ivCumT", "Cumulative stock by facility (sites below need in red)", "", "table")}</div>`,
+    `<div class="grid">${prods().map(p => card("c6", `ivCum${p}`, `${p}: cumulative vials issued (net) vs vials needed, by site`, "Red bars: sites without enough vials to reach their target (vials needed = target ÷ doses per vial × 1.05)")).join("")}</div>`,
+    `<div class="grid">${card("c12", "ivCumT", "Cumulative stock by facility (red = not enough vials for target)", "", "table")}</div>`,
     `<div class="grid">${card("c12", "ivSankey", "Stock flow in vials: national > regional > district store > site > opened / returned unopened", "Store layers are not in the field database: they are the sums of the site layer. Pick MR or IPV in the Vaccine filter to see one flow.", "tall")}</div>`,
     `<div class="grid">${prods().map(p => card("c6", `ivMap${p}`, `Map: sites by cumulative stock against need (${p})`, "", "map")).join("")}</div>`,
     `<div class="grid">${card("c12", "ivTbl", "Stock by site and campaign day", "", "table")}</div>`,
@@ -431,7 +431,7 @@ R.Inventory = () => {
       });
       const ct = []; sn.forEach(s => prods().forEach(p => { const rs = rows(p).filter(r => r.code === s.code); if (rs.length) ct.push({ cluster: s.cluster, name: s.name, p, iss: sum(rs, net), nd: sum(rs, need), t: tgt(rs) }); }));
       table("ivCumT", [{ h: "Cluster", l: 1, k: "cluster" }, { h: "Site", l: 1, k: "name" }, { h: "Vaccine", l: 1, k: "p" }, { h: "Vials issued (net)", f: r => fmt(r.iss) },
-        { h: "Vials needed", f: r => fmt1(r.nd) }, { h: "Issued minus needed", f: r => fmt1(r.iss - r.nd), bg: r => redIf(r.iss < r.nd) }, { h: "Target", f: r => fmt(r.t) }],
+        { h: "Vials needed", f: r => fmt1(r.nd) }, { h: "Vials short (-) or spare (+)", f: r => fmt1(r.iss - r.nd), bg: r => redIf(r.iss < r.nd) }, { h: "Target", f: r => fmt(r.t) }],
         ct.sort((a, b) => (a.iss - a.nd) - (b.iss - b.nd)));
       const links = {};
       const add = (s, t, v) => { if (v > 0) links[s + "→" + t] = (links[s + "→" + t] || 0) + v; };
@@ -444,8 +444,8 @@ R.Inventory = () => {
       draw("ivSankey", { tooltip: { trigger: "item", valueFormatter: v => fmt(v) + " vials" }, legend: { show: false },
         series: [{ type: "sankey", orient: "horizontal", left: 8, right: 160, top: 10, bottom: 10, nodeGap: 4, data: nodes, links: L2, emphasis: { focus: "adjacency" },
           label: { color: css("--ink-2"), fontSize: 10 }, lineStyle: { color: "gradient", opacity: .35 } }] });
-      prods().forEach(p => statusMap(`ivMap${p}`, s => { const rs = D.site_day.filter(r => r.code === s.code && r.p === p && dateOk(r.d)); return !rs.length ? "No stock data" : sum(rs, net) < sum(rs, need) ? "Below vials needed" : "Enough vials issued"; },
-        { "Below vials needed": "--critical", "Enough vials issued": "--good", "No stock data": "--muted" }, (s, st) => `<b>${esc(s.name)}</b><br>${p}: ${st}`));
+      prods().forEach(p => statusMap(`ivMap${p}`, s => { const rs = D.site_day.filter(r => r.code === s.code && r.p === p && dateOk(r.d)); return !rs.length ? "No stock data" : sum(rs, net) < sum(rs, need) ? "Not enough vials for target" : "Enough vials for target"; },
+        { "Not enough vials for target": "--critical", "Enough vials for target": "--good", "No stock data": "--muted" }, (s, st) => `<b>${esc(s.name)}</b><br>${p}: ${st}`));
       table("ivTbl", [{ h: "Date", l: 1, f: r => dlabel(r.d) }, { h: "Cluster", l: 1, f: r => esc(S(r.code).cluster) }, { h: "Site", l: 1, f: r => esc(S(r.code).name) }, { h: "Vaccine", l: 1, k: "p" },
         { h: "Vials received", f: r => fmt(r.rec) }, { h: "Additional vials received", f: r => fmt(r.add) }, { h: "Vials opened", f: r => fmt(r.opened) },
         { h: "Vials returned unopened", f: r => fmt(r.ret) }, { h: "Vials issued (net)", f: r => fmt(net(r)) }, { h: "Children vaccinated", f: r => fmt(r.vac) },

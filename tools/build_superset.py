@@ -41,7 +41,7 @@ C_WHITE = {"r": 190, "g": 190, "b": 190, "a": 1}
 DOT = {id(C_ORANGE): "🟠", id(C_BLUE): "🔵", id(C_GREEN): "🟢", id(C_PURPLE): "🟣", id(C_RED): "🔴", id(C_YELLOW): "🟡",
        id(C_WHITE): "⚪"}
 FACILITY_TYPES = {"Health centre": C_ORANGE, "Clinic": C_BLUE, "Outreach point": C_GREEN, "School": C_PURPLE}
-STATUS_COLOURS = {"Below vials needed": C_RED, "Enough vials issued": C_GREEN, "No stock data": C_WHITE}
+STATUS_COLOURS = {"Not enough vials for target": C_RED, "Enough vials for target": C_GREEN, "No stock data": C_WHITE}
 
 
 def legend_html(title, colours, note=""):
@@ -439,12 +439,12 @@ def define(days_remaining):
         bar(T, 6, 6, f"Inventory: {v} cumulative vials issued (net) vs vials needed, by site", "field_site_day", "site_name",
             [M("SUM(vials_issued_net)", "Vials issued (net)"), M("ROUND(SUM(vials_needed), 1)", "Vials needed")],
             filters=f + [TIME_F()], sort_by_metric=True, values=False)
-    table(T, 7, 12, "Inventory: cumulative stock by facility (sites below need in red)", "field_site_day",
+    table(T, 7, 12, "Inventory: cumulative stock by facility (red = not enough vials for target)", "field_site_day",
           ["cluster", "site_name", "product_label"],
           [M("SUM(vials_issued_net)", "Vials issued (net)"), M("ROUND(SUM(vials_needed), 1)", "Vials needed"),
-           M("ROUND(SUM(vials_issued_net) - SUM(vials_needed), 1)", "Issued minus needed"), M("SUM(target)", "Target")],
-          order=M("ROUND(SUM(vials_issued_net) - SUM(vials_needed), 1)", "Issued minus needed"), desc=False,
-          cond=[{"colorScheme": "#EFA1AA", "column": "Issued minus needed", "operator": "<", "targetValue": 0}],
+           M("ROUND(SUM(vials_issued_net) - SUM(vials_needed), 1)", "Vials short (-) or spare (+)"), M("SUM(target)", "Target")],
+          order=M("ROUND(SUM(vials_issued_net) - SUM(vials_needed), 1)", "Vials short (-) or spare (+)"), desc=False,
+          cond=[{"colorScheme": "#EFA1AA", "column": "Vials short (-) or spare (+)", "operator": "<", "targetValue": 0}],
           filters=[TIME_F()], height=60)
     chart(T, 8, 12, 72, "Inventory: stock flow in vials - national > regional > district store > site > opened / returned",
           "field_stock_flow", "sankey_v2", source="source", target="target", metric=M("SUM(vials)", "Vials"),

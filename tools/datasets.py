@@ -124,8 +124,8 @@ WITH n AS (SELECT site_code,
        FROM ({site_day_base()}) b GROUP BY 1)
 SELECT {DIMS}, s.latitude, s.longitude, s.coord_source, s.team_note,
        round(c.mr_coverage_pct, 1) AS mr_coverage_pct, round(c.ipv_coverage_pct, 1) AS ipv_coverage_pct,
-       CASE WHEN n.mr_gap IS NULL THEN 'No stock data' WHEN n.mr_gap < 0 THEN 'Below vials needed' ELSE 'Enough vials issued' END AS mr_stock_status,
-       CASE WHEN n.ipv_gap IS NULL THEN 'No stock data' WHEN n.ipv_gap < 0 THEN 'Below vials needed' ELSE 'Enough vials issued' END AS ipv_stock_status
+       CASE WHEN n.mr_gap IS NULL THEN 'No stock data' WHEN n.mr_gap < 0 THEN 'Not enough vials for target' ELSE 'Enough vials for target' END AS mr_stock_status,
+       CASE WHEN n.ipv_gap IS NULL THEN 'No stock data' WHEN n.ipv_gap < 0 THEN 'Not enough vials for target' ELSE 'Enough vials for target' END AS ipv_stock_status
 FROM {MP}.dim_site s
 LEFT JOIN ({cov_by('site_code')}) c ON c.site_code = s.site_code
 LEFT JOIN n ON n.site_code = s.site_code"""

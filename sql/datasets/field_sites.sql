@@ -22,8 +22,8 @@ JOIN microplan.public.dim_site s ON s.site_code = f.site_code
 JOIN microplan.public.dim_product p ON p.product_code = f.vaccine) b GROUP BY 1)
 SELECT s.region, s.district, s.boundary_code, s.cluster, s.site_code, s.site_name, s.facility_type, s.latitude, s.longitude, s.coord_source, s.team_note,
        round(c.mr_coverage_pct, 1) AS mr_coverage_pct, round(c.ipv_coverage_pct, 1) AS ipv_coverage_pct,
-       CASE WHEN n.mr_gap IS NULL THEN 'No stock data' WHEN n.mr_gap < 0 THEN 'Below vials needed' ELSE 'Enough vials issued' END AS mr_stock_status,
-       CASE WHEN n.ipv_gap IS NULL THEN 'No stock data' WHEN n.ipv_gap < 0 THEN 'Below vials needed' ELSE 'Enough vials issued' END AS ipv_stock_status
+       CASE WHEN n.mr_gap IS NULL THEN 'No stock data' WHEN n.mr_gap < 0 THEN 'Not enough vials for target' ELSE 'Enough vials for target' END AS mr_stock_status,
+       CASE WHEN n.ipv_gap IS NULL THEN 'No stock data' WHEN n.ipv_gap < 0 THEN 'Not enough vials for target' ELSE 'Enough vials for target' END AS ipv_stock_status
 FROM microplan.public.dim_site s
 LEFT JOIN (
 SELECT site_code, sum(CASE WHEN product = 'MR' THEN vaccinated END) / nullif(sum(CASE WHEN product = 'MR' THEN target END), 0) * 100 AS mr_coverage_pct,
