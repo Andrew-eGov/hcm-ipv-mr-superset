@@ -8,3 +8,4 @@ data/mock_progress.log
 *.xls
 .DS_Store
 !docs/HCM_Elastic_Plug-in_Sheet.xlsx
+static/data.json

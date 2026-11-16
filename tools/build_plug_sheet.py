@@ -31,202 +31,90 @@ DONE_STATUSES = ("Mapped - same name", "Mapped - different name")
 
 # ------------------------------------------------------------------ content
 INDEXES = [
-    # id, logical, holds, mock index, notes
-    ("I1", "Delivery tasks", "One document per child per vaccine delivery attempt (administered or not)", "project-task-index-v1",
-     "In HCM this is usually the project task index. The dashboard needs ONE doc per product per child; if HCM stores both vaccines in one task with a resources[] array, flag 'Needs transform'."),
-    ("I2", "Registered individuals", "One document per registered child", "individual-index-v1",
-     "Project beneficiary / individual index."),
-    ("I3", "Households", "One document per household visit (house-to-house only)", "household-index-v1",
-     "Include visits where no child was vaccinated (closed / refused / absent)."),
-    ("I4", "Stock transactions", "Receipts, dispatches, returns and losses at every store and team", "stock-index-v1",
-     "HCM stock index. Quantities are in vials for vaccines and pieces for devices."),
-    ("I5", "Supervisor checklists", "One document per submitted checklist", "service-task-v1",
-     "HCM service / checklist index. Answers must be reachable as fields (see sheet 3)."),
-    ("I6", "Complaints", "One document per complaint (PGR)", "pgr-services-index-v1",
-     "HCM PGR index."),
-    ("I7", "Downsync events", "One document per user downsync", "downsync-index-v1",
-     "If HCM has no downsync index, mark 'Not available in HCM' - only the downsync KPI is affected."),
-    ("I8", "AEFI cases", "One document per adverse event following immunization", "aefi-index-v1",
-     "HCM does not capture AEFI yet. Point this at the HCM AEFI / side-effect index once it exists, or at the national AEFI system export."),
+    # id, logical, holds, index read today, notes
+    ("I1", "Child line list", "One document per child seen at a site (both vaccines on the same document)", "field-child-v1",
+     "Today: the Children sheet of the Zambezi field database. In HCM: the individual / project-task index. If HCM stores one task per vaccine, flag 'Needs transform' (pivot to one row per child with mr / ipv flags)."),
+    ("I2", "Site-day report", "One document per site x date x vaccine: target, children vaccinated by age group, vials received / additional / opened / returned unopened",
+     "field-site-day-v1",
+     "Today: Agg_MR + Stock_MR and Agg_IPV + Stock_IPV of the field database. In HCM: stock index (vials) + task aggregates (children) + the microplan daily site target. Usually 'Needs transform' (a daily aggregation job)."),
 ]
 
-# id, index, field path (under Data.), ES type, format / allowed values, example, used by, notes
+# id, index, field path, ES type, format / allowed values, example, used by, notes
 FIELDS = [
-    # common
-    ("F01", "All (I1-I8)", "boundaryHierarchyCode.district", "keyword", "District boundary code, exactly as in the microplan Boundary List", "NAMIBIA_NA_01_01_OMARURU",
-     "All KPIs", "Joins every event to targets, region and district filters. Must match microplan codes 1:1."),
-    ("F02", "All (I1-I8)", "eventTime", "date", "Local event time (Namibia, UTC+2), ISO 8601", "2026-11-09T09:41:12",
-     "K03 K07 K08 K11 K12 K33 K34 K35 K38 K42", "Used for daily charts, days elapsed and off-hours checks. If HCM only has createdTime (epoch ms), say 'Needs transform'."),
-    ("F03", "All (I1-I8)", "createdBy", "keyword", "User UUID / id of the person who recorded it", "NAM-U-00431",
-     "K16 K17 K18 K34 K36", "Must match the user ids in the user list for sync-rate KPIs."),
-    ("F04", "I1 I2 I3 I5 I6 I8", "geoPoint", "geo_point", "{lat, lon} geo_point mapping", '{"lat": -21.41, "lon": 15.95}',
-     "K14 K15 K30", "Needs ES mapping type geo_point for clustering and outside-district checks."),
-    ("F05", "I1 I5 I6 I8", "latitude", "double", "Decimal degrees", "-21.417372", "K13 K28 K39 K44 K54", "Separate numeric copy of the GPS point."),
-    ("F06", "I1 I5 I6 I8", "longitude", "double", "Decimal degrees", "15.951404", "K13 K39 K44 K54", ""),
-    ("F07", "I1", "locationAccuracy", "float", "GPS accuracy in metres", "12.5", "K29", "Accuracy > 100 m is flagged."),
-    ("F08", "I1", "createdTime", "long", "Epoch milliseconds", "1794200472000", "K13 K29", "Only used to sort map points newest first."),
-    # task
-    ("F10", "I1", "productCode", "keyword", "Vaccine code - see sheet 4", "MR", "K01 K02 K04 K05 K06 K07 K09 K10 K23 K31", "Value codes on sheet 4."),
-    ("F11", "I1", "administrationStatus", "keyword", "Delivery outcome - see sheet 4", "ADMINISTRATION_SUCCESS", "K01 K02 K04 K05 K10 K13 K31", ""),
-    ("F12", "I1", "reasonNotAdministered", "keyword", "Why not vaccinated (empty when administered) - see sheet 4", "REFUSED", "K10 K13", ""),
-    ("F13", "I1", "quantity", "integer", "Doses given in this record (1 when administered, 0 otherwise)", "1", "K01 K02 K04 K06 K07 K08 K23", "If HCM stores quantity in vials or ml, flag 'Needs transform'."),
-    ("F14", "I1", "deliveryMode", "keyword", "Fixed post / house to house / transit post - see sheet 4", "HOUSE_TO_HOUSE", "K08 K14 Delivery-mode filter", ""),
-    ("F15", "I1 I2", "individualId", "keyword", "Unique child id (same across both vaccines)", "IND-3f2a9c1d0b7e44", "K05 K31", "Required to count children who got both vaccines and duplicates."),
-    ("F16", "I1 I2", "ageInMonths", "integer", "Child age in completed months at vaccination", "27", "K05 K09", "If only dateOfBirth exists, flag 'Needs transform' (age is derived)."),
-    ("F17", "I1 I2", "gender", "keyword", "MALE / FEMALE (empty if not recorded)", "FEMALE", "K11 K32", ""),
-    ("F18", "I1", "teamId", "keyword", "Vaccination team id", "NAMIBIA_NA_01_01_OMARURU_T04", "K35", ""),
-    ("F19", "I1", "teamType", "keyword", "Team type from the microplan", "Mobile/outreach", "K35", "Optional - table still works without it."),
-    # individual
-    ("F20", "I2", "dateOfBirth", "date", "yyyy-MM-dd (empty if not recorded)", "2023-08-14", "K32", "Missing DOB counts as an incomplete registration."),
-    ("F21", "I2", "deliveryMode", "keyword", "Same codes as F14", "FIXED_POST", "K11", ""),
-    ("F22", "I2", "eligibleMR", "boolean", "true if 9 months to < 10 years", "true", "K11", "Can be derived from age if HCM does not store it ('Needs transform')."),
-    ("F23", "I2", "eligibleIPV", "boolean", "true if 4-59 months", "false", "K11", "Can be derived from age."),
-    # household
-    ("F30", "I3", "visitOutcome", "keyword", "Household visit result - see sheet 4", "VISITED", "K12 K15", ""),
-    ("F31", "I3", "memberCount", "integer", "Household size", "6", "K15", ""),
-    # stock
-    ("F40", "I4", "facilityId", "keyword", "Store where the transaction was recorded (code as in microplan Facilities List)", "FAC_NAMIBIA_NA_01_01_OMARURU", "K19 K20 K21 K22 K27", "Mock uses 'FAC_' + boundary code; real ids must be loaded into dim_facility."),
-    ("F41", "I4", "productCode", "keyword", "Product code - see sheet 4", "MR", "K20 K21 K22 K23 K24 K25 K26 K27", ""),
-    ("F42", "I4", "transactionType", "keyword", "RECEIVED / DISPATCHED / RETURNED / LOSS - see sheet 4", "DISPATCHED", "K20 K21 K22 K23 K24 K25 K26", ""),
-    ("F43", "I4", "quantity", "integer", "Units moved (vials for vaccines, pieces for devices)", "120", "K20 K21 K22 K23 K24 K25 K26 K27", ""),
-    ("F44", "I4", "senderId", "keyword", "Sending store id (or SUPPLIER)", "FAC_NAMIBIA_NA_01_ERONGO", "K24 K25 K26", ""),
-    ("F45", "I4", "senderName", "keyword", "Sending store name", "Erongo Regional Vaccine Store", "K24 K25", ""),
-    ("F46", "I4", "senderType", "keyword", "WAREHOUSE / TEAM / SUPPLIER - see sheet 4", "WAREHOUSE", "K21 K23", "Team returns are identified by senderType = TEAM."),
-    ("F47", "I4", "receiverId", "keyword", "Receiving store id (or team id)", "FAC_NAMIBIA_NA_01_01_OMARURU", "K24 K25 K26", ""),
-    ("F48", "I4", "receiverName", "keyword", "Receiving store / team name", "Omaruru District Vaccine Store", "K24 K25", ""),
-    ("F49", "I4", "receiverType", "keyword", "WAREHOUSE / TEAM - see sheet 4", "TEAM", "K21 K23", "Issues to teams are identified by receiverType = TEAM."),
-    ("F50", "I4", "waybillNumber", "keyword", "Shared by the DISPATCHED and matching RECEIVED record", "WB-48213", "K24", "Without a shared waybill the discrepancy report cannot pair transactions."),
-    # checklist
-    ("F60", "I5", "supervisorRole", "keyword", "Role of submitter - see sheet 4", "TEAM_SUPERVISOR", "K36 K38 K39", ""),
-    ("F61", "I5", "checklistName", "keyword", "Checklist template name", "Team Supervisor Checklist", "K38", ""),
-    ("F62", "I5", "answeredQuestions", "integer", "Questions answered", "10", "K37", ""),
-    ("F63", "I5", "totalQuestions", "integer", "Questions in the checklist", "10", "K37", ""),
-    ("F64", "I5", "qColdChainOk", "boolean", "Vaccine carrier with conditioned ice packs (yes = true)", "true", "K37", "One row per checklist question. Map each to the real HCM question code."),
-    ("F65", "I5", "qVvmOk", "boolean", "VVM usable (stage 1-2)", "true", "K37", ""),
-    ("F66", "I5", "qOpenVialLabelled", "boolean", "Opened vials labelled with time", "false", "K37", ""),
-    ("F67", "I5", "qCorrectSyringe", "boolean", "Correct AD syringe per vaccine", "true", "K37", ""),
-    ("F68", "I5", "qSafetyBoxUsed", "boolean", "Safety box used correctly", "true", "K37", ""),
-    ("F69", "I5", "qAgeScreening", "boolean", "Age screening done correctly", "true", "K37", ""),
-    ("F70", "I5", "qFingerMarking", "boolean", "Finger marking done", "true", "K37", ""),
-    ("F71", "I5", "qTallyMatchesApp", "boolean", "Tally sheet matches app", "false", "K37", ""),
-    ("F72", "I5", "qTeamComplete", "boolean", "Team complete and on time", "true", "K37", ""),
-    ("F73", "I5", "qSocialMobilisation", "boolean", "Community informed", "true", "K37", ""),
-    # complaints
-    ("F80", "I6", "complaintType", "keyword", "Complaint category", "Household/child not visited", "K42 K44", ""),
-    ("F81", "I6", "applicationStatus", "keyword", "PGR status - see sheet 4", "RESOLVED", "K40 K41 K42", ""),
-    ("F82", "I6", "source", "keyword", "mobile / helpdesk", "helpdesk", "K42", "Optional."),
-    ("F24", "I1 I2", "zeroDose", "boolean", "true if the child had NO prior routine dose (WHO zero-dose), by card or caregiver recall", "false",
-     "K45 K46 K47", "Asked at registration. If HCM stores prior doses instead, 'Needs transform': zeroDose = no prior DTP1/MCV1."),
-    ("F25", "I2", "priorVaccinationSource", "keyword", "How prior status was established: CARD / RECALL / NONE", "CARD", "K45",
-     "Optional - documents the zero-dose evidence."),
-    ("F90", "I8", "severity", "keyword", "SERIOUS / NON_SERIOUS (WHO AEFI classification)", "NON_SERIOUS", "K48 K49 K50 K52 K54", ""),
-    ("F91", "I8", "symptom", "keyword", "Main symptom - free list (fever, injection-site reaction, febrile seizure...)", "FEVER", "K52 K54", ""),
-    ("F92", "I8", "productCode", "keyword", "Suspected vaccine: MR / IPV / MR+IPV", "MR+IPV", "K53", "MR+IPV when the event cannot be attributed to one vaccine."),
-    ("F93", "I8", "outcome", "keyword", "RECOVERED / RECOVERING / REFERRED / HOSPITALISED", "RECOVERED", "K54", ""),
-    ("F95", "I8", "individualId", "keyword", "Child id - links the AEFI to the vaccination record", "IND-3f2a9c1d0b7e44", "K53", "Optional but recommended."),
-    ("F83", "I6", "resolutionHours", "float", "Hours from creation to resolution (empty if open)", "21.5", "K41", "Usually 'Needs transform': (resolved time - created time) in hours."),
+    ("F01", "I1", "child_id", "keyword", "Unique child id", "BKL-000001", "K32", "Only used to count children; never shown or exported."),
+    ("F02", "I1", "event_date", "date", "Date the child was vaccinated (yyyy-MM-dd, local time)", "2026-11-10", "K13 K30 K31 K32", ""),
+    ("F03", "I1", "site_code", "keyword", "Site code, as in data/sites.csv", "S01", "K13 K30 K31 K32", "Join on site code, never on site name (names vary between sheets)."),
+    ("F04", "I1", "age_group", "keyword", "Age group as recorded - see sheet 4", "12-59 months", "K31", ""),
+    ("F05", "I1", "mr", "integer", "1 if MR given, else 0", "1", "K13 K30 K32", ""),
+    ("F06", "I1", "ipv", "integer", "1 if IPV given, else 0", "1", "K13 K30 K32", ""),
+    ("F07", "I1", "vaccine_status", "keyword", "Which vaccines the child received - see sheet 4", "IPV + MR", "K31", ""),
+    ("F08", "I1", "gender", "keyword", "MALE / FEMALE (empty if not recorded)", "FEMALE", "K13", "Not in the field database yet: the gender pies show 'Not recorded'."),
+    ("F09", "I1", "source_campaign_day", "integer", "Campaign day as written by the source", "1", "K33", "Only used to flag day-number mismatches."),
+    ("F20", "I2", "vaccine", "keyword", "MR or IPV - see sheet 4", "MR", "All I2 KPIs", "One document per vaccine."),
+    ("F21", "I2", "event_date", "date", "Report date (yyyy-MM-dd)", "2026-11-10", "All I2 KPIs", "Campaign day is computed from this date (9 Nov = day 1)."),
+    ("F22", "I2", "site_code", "keyword", "Site code, as in data/sites.csv", "S01", "All I2 KPIs", ""),
+    ("F23", "I2", "target", "integer", "Children planned for the site that day", "209", "K01 K02 K03 K04 K10 K11 K12 K14 K22", "Microplan daily site target. Planned = sum over the sites and days that uploaded data."),
+    ("F24", "I2", "vaccinated_6_11m", "integer", "MR: children vaccinated 6-11 months", "14", "K12", "MR only."),
+    ("F25", "I2", "vaccinated_14w_11m", "integer", "IPV: children vaccinated 14 weeks-11 months", "17", "K12", "IPV only."),
+    ("F26", "I2", "vaccinated_12_59m", "integer", "Children vaccinated 12-59 months", "79", "K12", "Both vaccines."),
+    ("F27", "I2", "vaccinated_5_10y", "integer", "MR: children vaccinated 5-10 years", "109", "K12", "MR only."),
+    ("F28", "I2", "total_vaccinated", "integer", "Children vaccinated (sum of the age groups)", "202", "K01 K02 K03 K05 K10 K11 K14 K21 K30 K31", ""),
+    ("F29", "I2", "vials_received", "integer", "Vials issued to the site at the start of the day", "59", "K15 K16 K17 K20 K24 K34", ""),
+    ("F30", "I2", "additional_vials_received", "integer", "Top-up vials issued during the day", "0", "K16 K17 K20 K24 K34", ""),
+    ("F31", "I2", "vials_opened", "integer", "Vials used for vaccination that day", "41", "K05 K06 K18 K21 K24 K34", ""),
+    ("F32", "I2", "vials_returned_unopened", "integer", "Vials sent back to the store at day end", "18", "K17 K18 K19 K20 K24 K34", ""),
+    ("F33", "I2", "source_campaign_day", "integer", "Campaign day as written by the source", "2", "K33", "Only used to flag day-number mismatches."),
 ]
 
 CODES = [
     # field id, field, dashboard code, meaning
-    ("F10/F41", "productCode", "MR", "Measles-Rubella vaccine"),
-    ("F10/F41", "productCode", "IPV", "Fractional IPV (fIPV)"),
-    ("F41", "productCode", "ADS_05", "AD syringe 0.5 mL (MR)"),
-    ("F41", "productCode", "ADS_01", "AD syringe 0.1 mL (fIPV)"),
-    ("F41", "productCode", "RUP_5", "Reconstitution syringe 5 mL (MR)"),
-    ("F11", "administrationStatus", "ADMINISTRATION_SUCCESS", "Dose given - the only value counted as a dose"),
-    ("F11", "administrationStatus", "NOT_ADMINISTERED", "Any non-administered outcome (reason in F12)"),
-    ("F12", "reasonNotAdministered", "REFUSED", "Caregiver refused"),
-    ("F12", "reasonNotAdministered", "CONTRAINDICATED_SICK", "Child sick / contraindicated"),
-    ("F12", "reasonNotAdministered", "HESITANT_RETURN_LATER", "Hesitant, asked to return later"),
-    ("F12", "reasonNotAdministered", "STOCK_OUT", "No vaccine available at the time"),
-    ("F14/F21", "deliveryMode", "FIXED_POST", "Fixed post (health facility)"),
-    ("F14/F21", "deliveryMode", "HOUSE_TO_HOUSE", "House to house"),
-    ("F14/F21", "deliveryMode", "TRANSIT_POST", "Transit post (temporary fixed)"),
-    ("F30", "visitOutcome", "VISITED", "Household visited"),
-    ("F30", "visitOutcome", "CLOSED_HOUSEHOLD", "Nobody home"),
-    ("F30", "visitOutcome", "REFUSED", "Household refused"),
-    ("F30", "visitOutcome", "CHILD_ABSENT", "Eligible child absent"),
-    ("F42", "transactionType", "RECEIVED", "Stock received into the store"),
-    ("F42", "transactionType", "DISPATCHED", "Stock issued out of the store"),
-    ("F42", "transactionType", "RETURNED", "Stock returned into the store"),
-    ("F42", "transactionType", "LOSS", "Damaged / expired / VVM stage 3"),
-    ("F46/F49", "senderType / receiverType", "WAREHOUSE", "A store (national, regional, district)"),
-    ("F46/F49", "senderType / receiverType", "TEAM", "Vaccination team"),
-    ("F46", "senderType", "SUPPLIER", "External supplier (into national store)"),
-    ("F60", "supervisorRole", "TEAM_SUPERVISOR", "Team supervisor"),
-    ("F60", "supervisorRole", "DISTRICT_SUPERVISOR", "District supervisor"),
-    ("F60", "supervisorRole", "PROVINCIAL_SUPERVISOR", "Regional supervisor"),
-    ("F60", "supervisorRole", "NATIONAL_SUPERVISOR", "National supervisor"),
-    ("F81", "applicationStatus", "RESOLVED", "Resolved"),
-    ("F81", "applicationStatus", "REJECTED", "Rejected"),
-    ("F81", "applicationStatus", "PENDING_ASSIGNMENT / PENDING_AT_LME", "Open (any other status counts as open)"),
-    ("F24", "zeroDose", "true", "Child had no prior routine dose (zero-dose)"),
-    ("F24", "zeroDose", "false", "Child had at least one prior routine dose"),
-    ("F90", "severity", "SERIOUS", "Serious AEFI (hospitalisation, life-threatening, disability, death)"),
-    ("F90", "severity", "NON_SERIOUS", "Non-serious AEFI"),
-    ("F92", "productCode (AEFI)", "MR+IPV", "Suspected vaccine cannot be attributed to one of the two"),
+    ("F20", "vaccine", "MR", "Measles-Rubella vaccine"),
+    ("F20", "vaccine", "IPV", "Inactivated polio vaccine"),
+    ("F04", "age_group", "0-11 months", "Line-list age group (shown as 6-11 months for MR, 14 weeks-11 months for IPV)"),
+    ("F04", "age_group", "12-59 months", "Line-list age group"),
+    ("F04", "age_group", "5-10 years", "Line-list age group (MR only)"),
+    ("F07", "vaccine_status", "IPV + MR", "Child received both vaccines"),
+    ("F07", "vaccine_status", "MR only (not eligible for IPV)", "MR only, child outside the IPV age range"),
+    ("F07", "vaccine_status", "MR only (IPV eligible, not received)", "MR only, IPV-eligible child did not get IPV"),
+    ("F07", "vaccine_status", "IPV only", "IPV only"),
+    ("F08", "gender", "MALE", "Male"),
+    ("F08", "gender", "FEMALE", "Female"),
 ]
 
-# id, tab, KPI, definition, numerator, denominator, ES indexes, fields, microplan inputs, dataset
+COV = "Children vaccinated ÷ target"
 KPIS = [
-    ("K01", "Overview / Coverage", "MR coverage %", "Cumulative MR doses ÷ MR target", "Sum of quantity where productCode = MR and status = ADMINISTRATION_SUCCESS", "MR target (children 9 m to <10 y)", "I1", "F01 F10 F11 F13", "dim_district.mr_target", "hcm_coverage"),
-    ("K02", "Overview / Coverage", "fIPV coverage %", "Cumulative fIPV doses ÷ fIPV target", "Sum of quantity where productCode = IPV and status = ADMINISTRATION_SUCCESS", "fIPV target (95% of under-5)", "I1", "F01 F10 F11 F13", "dim_district.ipv_target", "hcm_coverage"),
-    ("K03", "Overview / Coverage", "Doses vs plan to date", "Doses ÷ (target × days elapsed ÷ 11)", "K01 + K02 doses", "Target × days elapsed ÷ campaign days", "I1", "F01 F02 F10 F11 F13", "targets, dim_campaign_day", "hcm_coverage"),
-    ("K04", "Overview", "Total doses administered", "MR + fIPV doses", "Sum of quantity where status = ADMINISTRATION_SUCCESS", "-", "I1", "F01 F10 F11 F13", "-", "hcm_coverage"),
-    ("K05", "Overview / Coverage", "Children 9-59 m given both vaccines", "(MR doses + fIPV doses − distinct children) ÷ distinct children, ages 9-59 m", "Children with both vaccines", "Distinct children aged 9-59 m vaccinated", "I1", "F01 F10 F11 F15 F16", "-", "hcm_coadmin"),
-    ("K06", "Coverage", "Coverage % by district / region", "K01 and K02 per district, rolled up to region", "Doses per district", "Target per district", "I1", "F01 F10 F11 F13", "targets", "hcm_coverage"),
-    ("K07", "Overview / Coverage", "Planned vs actual (cumulative)", "Cumulative doses by day ÷ target vs planned cumulative %", "Cumulative doses", "Target", "I1", "F01 F02 F10 F11 F13", "dim_campaign_day.planned_cum_pct", "hcm_planned_vs_actual"),
-    ("K08", "Coverage", "Daily doses by delivery mode", "Doses per day split by mode", "Doses", "-", "I1", "F01 F02 F13 F14", "-", "hcm_delivery_daily"),
-    ("K09", "Coverage", "Doses by age group", "Doses for 4-8 m, 9-59 m, 5-9 y", "Doses", "-", "I1", "F01 F10 F11 F16", "-", "hcm_age"),
-    ("K10", "Coverage", "Missed opportunities by reason", "Children not vaccinated, by reason", "Records with status <> ADMINISTRATION_SUCCESS", "-", "I1", "F01 F10 F11 F12", "-", "hcm_delivery_daily"),
-    ("K11", "Coverage", "Registrations by gender / mode", "Registered children by gender, delivery mode, eligibility", "Registrations", "-", "I2", "F01 F02 F17 F21 F22 F23", "-", "hcm_registration_daily"),
-    ("K12", "Coverage", "Household visit outcome", "Households by outcome", "Households", "-", "I3", "F01 F02 F30", "-", "hcm_household_daily"),
-    ("K13", "Coverage (map)", "Missed / refused children map", "Latest 10,000 non-administered records as points", "-", "-", "I1", "F01 F05 F06 F08 F10 F11 F12", "-", "hcm_points_missed"),
-    ("K14", "Overview / Coverage (map)", "Vaccination events clustered", "Doses aggregated to map tiles (geotile) with centroid", "Doses", "-", "I1", "F01 F04 F10 F11 F14", "-", "hcm_map_delivery_tiles"),
-    ("K15", "Coverage (map)", "Households visited heatmap", "Households aggregated to map tiles", "Households", "-", "I3", "F01 F04 F30 F31", "-", "hcm_map_registration_tiles"),
-    ("K16", "All tabs (sync strip)", "Frontline sync rate", "Vaccinators + registrars with ≥1 record ÷ all of them", "Users found as createdBy in I1/I2/I3", "Users with role VACCINATOR/REGISTRAR", "I1 I2 I3", "F03", "dim_user", "hcm_sync"),
-    ("K17", "Data Quality (sync strip)", "Downsync rate", "Vaccinators who downsynced ÷ vaccinators", "Users found as createdBy in I7", "Vaccinators", "I7", "F03", "dim_user", "hcm_sync"),
-    ("K18", "Supervision (sync strip)", "Supervisor sync rate", "Supervisors with ≥1 checklist ÷ supervisors", "Users found as createdBy in I5", "Supervisors", "I5", "F03", "dim_user", "hcm_sync"),
-    ("K19", "Inventory (sync strip)", "Warehouses reporting", "Stores with ≥1 stock transaction ÷ stores", "Distinct facilityId in I4", "Stores in Facilities List", "I4", "F40", "dim_facility", "hcm_sync"),
-    ("K20", "Inventory", "Vials in hand", "Received + returned − dispatched − loss, per store", "-", "-", "I4", "F40 F41 F42 F43", "dim_facility, dim_product", "hcm_stock_position"),
-    ("K21", "Inventory", "Days of stock left", "Vials in hand ÷ average daily net issue to teams (last 3 days)", "Vials in hand", "Avg daily (issued to TEAM − returned by TEAM)", "I4", "F02 F40 F41 F42 F43 F46 F49", "-", "hcm_stock_position"),
-    ("K22", "Inventory / Overview", "Stock status / stores at risk", "Sufficient, insufficient for remaining days, stock-out risk (< 2 days)", "-", "-", "I4", "F02 F40 F41 F42 F43 F46 F49", "-", "hcm_stock_position"),
-    ("K23", "Inventory / Overview", "Wastage %", "(Net vials issued to teams × doses per vial − doses administered) ÷ doses opened", "Doses wasted", "Doses in opened vials", "I1 I4", "F13 F40 F41 F42 F43 F46 F49", "dim_product.doses_per_unit, planned_wastage_pct", "hcm_wastage"),
-    ("K24", "Inventory", "Receipt discrepancy", "Dispatched − received per waybill", "Sent", "Received", "I4", "F41 F42 F43 F44 F45 F47 F48 F50", "dim_facility", "hcm_stock_discrepancy"),
-    ("K25", "Inventory", "Stock flow (Sankey)", "Vials dispatched national → region → district → teams", "-", "-", "I4", "F41 F42 F43 F44 F47 F49", "dim_facility", "hcm_stock_flow"),
-    ("K26", "Inventory (map)", "Stock movements map", "Lines between sending and receiving stores", "-", "-", "I4", "F41 F42 F43 F44 F47", "dim_facility latitude/longitude", "hcm_stock_arcs"),
-    ("K27", "Inventory", "AD syringes in hand", "As K20 for ADS_05 + ADS_01", "-", "-", "I4", "F40 F41 F42 F43", "-", "hcm_stock_position"),
-    ("K28", "Data Quality", "Records without GPS", "Delivery records with no latitude", "Records missing F05", "Delivery records", "I1", "F01 F05", "-", "hcm_dq_district"),
-    ("K29", "Data Quality", "GPS accuracy > 100 m", "Records with locationAccuracy > 100", "-", "Delivery records", "I1", "F01 F07", "-", "hcm_dq_district"),
-    ("K30", "Data Quality", "GPS outside assigned district", "Point not inside its district polygon (ES geo_shape)", "-", "Delivery records", "I1", "F01 F04", "district polygons", "hcm_dq_district"),
-    ("K31", "Data Quality", "Duplicate doses", "Same child + vaccine administered more than once", "Children with >1 dose", "-", "I1", "F01 F10 F11 F15", "-", "hcm_dq_district"),
-    ("K32", "Data Quality", "Incomplete registrations", "Registrations missing gender or date of birth", "-", "Registrations", "I2", "F01 F17 F20", "-", "hcm_dq_district"),
-    ("K33", "Data Quality", "Off-hours records", "Records with event time 20:00-06:00", "-", "-", "I1", "F01 F02", "-", "hcm_dq_district"),
-    ("K34", "Data Quality", "Users > 120 doses / day", "Users with unusually high daily output", "-", "-", "I1", "F02 F03 F11", "dim_user", "hcm_dq_users"),
-    ("K35", "Data Quality", "Teams < 20 doses / day", "Teams with very low daily output", "-", "-", "I1", "F01 F02 F11 F18 F19", "-", "hcm_dq_teams"),
-    ("K36", "Supervision", "Checklist completion by level", "Checklists submitted ÷ expected (team supervisors 2/day, others 1/day)", "Checklists per supervisor", "Supervisors × per day × days elapsed", "I5", "F03 F60", "dim_user", "hcm_checklist_completion"),
-    ("K37", "Supervision", "Checklist findings (% yes)", "Yes answers ÷ checklists, per question", "Yes answers", "Checklists", "I5", "F01 F62 F63 F64 F65 F66 F67 F68 F69 F70 F71 F72 F73", "-", "hcm_checklist_findings"),
-    ("K38", "Supervision", "Checklists per day", "Submissions per day by role", "-", "-", "I5", "F01 F02 F60 F61", "-", "hcm_checklist_daily"),
-    ("K39", "Supervision (map)", "Checklist locations map", "Where checklists were submitted", "-", "-", "I5", "F01 F05 F06 F60", "-", "hcm_points_checklists"),
-    ("K40", "Complaints / Overview", "Complaints, resolved, resolution rate", "Resolved ÷ total complaints", "RESOLVED complaints", "All complaints", "I6", "F01 F02 F81", "-", "hcm_complaints_daily"),
-    ("K41", "Complaints", "Average hours to resolve", "Sum of resolution hours ÷ resolved complaints", "-", "-", "I6", "F01 F81 F83", "-", "hcm_complaints_daily"),
-    ("K42", "Complaints", "Complaints by type / status / day", "Counts", "-", "-", "I6", "F01 F02 F80 F81 F82", "-", "hcm_complaints_daily"),
-    ("K43", "Complaints (map)", "Complaints per 10,000 MR doses", "Complaints ÷ MR doses × 10,000, per district", "Complaints", "MR doses", "I1 I6", "F01 F10 F11 F13", "-", "hcm_map_complaints"),
-    ("K44", "Complaints (map)", "Complaint locations map", "Complaints as points", "-", "-", "I6", "F01 F05 F06 F80 F81", "-", "hcm_points_complaints"),
-    ("K45", "Overview / Coverage", "Zero-dose children reached", "Distinct vaccinated children with zeroDose = true", "Zero-dose children vaccinated", "-", "I1 I2", "F01 F11 F15 F24 F25", "-", "hcm_zero_dose_daily"),
-    ("K46", "Overview / Coverage", "Zero-dose share", "Zero-dose children ÷ all children vaccinated", "Zero-dose children", "Children vaccinated", "I1", "F01 F11 F15 F24", "-", "hcm_zero_dose_daily"),
-    ("K47", "Overview / Coverage (map)", "Zero-dose children map (clustered) and share by district", "Zero-dose children per map tile; share per district", "Zero-dose children", "Children vaccinated", "I1", "F01 F04 F11 F14 F15 F24", "district polygons", "hcm_map_zero_dose_tiles, hcm_map_coverage"),
-    ("K48", "Overview / Coverage", "AEFI reported", "Count of AEFI cases", "-", "-", "I8", "F01 F02 F90", "-", "hcm_aefi_daily"),
-    ("K49", "Coverage (table, charts)", "Serious AEFI", "Count where severity = SERIOUS (column in the district table; split in AEFI charts)", "-", "-", "I8", "F01 F02 F90", "-", "hcm_aefi_daily"),
-    ("K50", "Overview / Coverage (map)", "AEFI per 100,000 doses", "AEFI cases ÷ doses administered × 100,000, overall and by district", "AEFI cases", "Doses administered", "I8 I1", "F01 F90 F10 F11 F13", "-", "hcm_zero_dose_aefi_district, hcm_map_coverage"),
-    ("K52", "Coverage", "AEFI by symptom and severity", "Counts", "-", "-", "I8", "F01 F90 F91", "-", "hcm_aefi_daily"),
-    ("K53", "Coverage", "AEFI by suspected vaccine", "Counts by MR / fIPV / not attributable", "-", "-", "I8", "F01 F92 F95", "-", "hcm_aefi_daily"),
-    ("K54", "Coverage (map)", "AEFI cases map", "AEFI cases as points coloured by severity", "-", "-", "I8", "F01 F05 F06 F90 F91 F93", "-", "hcm_points_aefi"),
+    # id, tab, KPI, definition, numerator, denominator, ES indexes, ES fields, microplan inputs, dataset
+    ("K01", "Overview", "Children vaccinated (MR, IPV)", "Sum of total_vaccinated, per vaccine", "total_vaccinated", "-", "I2", "F20 F21 F22 F28", "dim_site", "field_site_day"),
+    ("K02", "Overview", "Target (MR, IPV)", "Sum of target for the sites and days that uploaded data", "target", "-", "I2", "F20 F21 F22 F23", "dim_site", "field_site_day"),
+    ("K03", "Overview / Coverage", "Coverage of target (MR, IPV)", COV, "total_vaccinated", "target", "I2", "F20 F21 F22 F23 F28", "dim_site", "field_site_day"),
+    ("K04", "Overview", "Vaccinated vs remaining to target (pie)", "Vaccinated and target - vaccinated, per vaccine", "total_vaccinated", "target", "I2", "F20 F21 F22 F23 F28", "dim_site", "field_progress_pie"),
+    ("K05", "Overview / Inventory", "Wastage %", "(doses in opened vials - children vaccinated) ÷ doses in opened vials", "vials_opened × doses per vial - total_vaccinated", "vials_opened × doses per vial", "I2", "F20 F22 F28 F31", "dim_product.doses_per_unit", "field_site_day"),
+    ("K06", "Overview", "Vials opened", "Sum of vials_opened", "vials_opened", "-", "I2", "F20 F22 F31", "-", "field_site_day"),
+    ("K07", "Overview", "Sites reporting", "Distinct sites with a report", "site_code", "-", "I2", "F20 F22", "dim_site", "field_site_day"),
+    ("K10", "Overview / Coverage", "Coverage by region / district / cluster / site", COV + ", grouped", "total_vaccinated", "target", "I2", "F20 F22 F23 F28", "dim_site, dim_district", "field_site_day"),
+    ("K11", "Overview / Coverage (map)", "Coverage maps by district and region", COV + " per area; areas without uploads stay blank", "total_vaccinated", "target", "I2", "F20 F22 F23 F28", "dim_site, dim_district_polygon, dim_region_polygon", "field_district_map, field_region_map"),
+    ("K12", "Coverage", "Children vaccinated by age group", "Sum of the age-group columns, labels as in the source", "vaccinated_* columns", "-", "I2", "F20 F22 F24 F25 F26 F27", "-", "field_age"),
+    ("K13", "Overview", "Gender distribution (MR, IPV)", "Children by gender, per vaccine received", "children", "-", "I1", "F02 F03 F05 F06 F08", "dim_site", "field_children"),
+    ("K14", "Coverage", "Planned vs actual, cumulative", "Cumulative target and cumulative children vaccinated by date", "total_vaccinated", "target", "I2", "F20 F21 F22 F23 F28", "-", "field_site_day"),
+    ("K15", "Inventory", "Stores and sites with at least one stock entry", "Distinct sites with vials_received recorded", "site_code", "-", "I2", "F22 F29", "dim_site", "field_site_day"),
+    ("K16", "Inventory", "Vials received / additional vials received", "Sums, per vaccine", "vials_received, additional_vials_received", "-", "I2", "F20 F22 F29 F30", "-", "field_site_day"),
+    ("K17", "Inventory", "Vials issued (net)", "Vials received + additional vials received - vials returned unopened", "F29 + F30 - F32", "-", "I2", "F20 F22 F29 F30 F32", "-", "field_site_day"),
+    ("K18", "Inventory", "Vials opened / returned unopened", "Sums, per vaccine", "vials_opened, vials_returned_unopened", "-", "I2", "F20 F22 F31 F32", "-", "field_site_day"),
+    ("K19", "Inventory", "Vials in hand - district store", "Vials returned unopened on the latest day with data", "vials_returned_unopened", "-", "I2", "F20 F21 F22 F32", "-", "field_stock_days"),
+    ("K20", "Inventory", "Days of stock left (with campaign day)", "Vials in hand ÷ average daily vials opened (last 3 days); shown as 'x days of stock · Day n of 11'", "K19", "average vials_opened per day", "I2", "F20 F21 F22 F31 F32", "campaign length (11 days)", "field_stock_days"),
+    ("K21", "Inventory", "Wastage % by district and site (allowed 5%)", "As K05, grouped, with the 5% allowed line", "see K05", "see K05", "I2", "F20 F22 F28 F31", "dim_product", "field_site_day"),
+    ("K22", "Inventory", "Cumulative vials issued (net) vs vials needed, by site", "Vials needed = target ÷ doses per vial × (1 + 5%); sites below need highlighted", "K17", "target ÷ doses per vial × 1.05", "I2", "F20 F22 F23 F29 F30 F32", "dim_product", "field_site_day, field_sites"),
+    ("K24", "Inventory", "Stock flow (Sankey)", "National > regional > district store > site > vials opened / returned unopened (store layers = sums of sites)", "vials", "-", "I2", "F20 F22 F29 F30 F31 F32", "dim_site", "field_stock_flow"),
+    ("K30", "Data Quality", "Child line list vs aggregate", "Children in the line list ≠ total_vaccinated for the same site, date and vaccine", "line-list count", "total_vaccinated", "I1 I2", "F02 F03 F05 F06 F21 F22 F28", "-", "field_dq"),
+    ("K31", "Data Quality", "Children above target / above doses", "Site-days with total_vaccinated > target, or > doses in opened vials", "total_vaccinated", "target, doses", "I2", "F22 F23 F28 F31", "dim_product", "field_dq"),
+    ("K32", "Coverage", "Children by vaccines received", "Children per vaccine_status", "children", "-", "I1", "F01 F02 F03 F07", "dim_site", "field_child_status"),
+    ("K33", "Data Quality", "Campaign-day label mismatch", "Source campaign day ≠ day computed from the date", "-", "-", "I1 I2", "F09 F21 F33", "-", "field_dq"),
+    ("K34", "Data Quality", "Stock not balanced", "Vials received + additional ≠ opened + returned unopened", "F29 + F30 - F31 - F32", "-", "I2", "F22 F29 F30 F31 F32", "-", "field_dq"),
+    ("K35", "Data Quality", "Reporting completeness", "Site-day reports received ÷ sites × vaccines × dates with data", "reports", "sites × vaccines × dates", "I2", "F20 F21 F22", "dim_site", "field_reporting"),
 ]
 
 CONNECTION = [
-    # parameter, file / setting, mock value, notes
+    # parameter, file / setting, current value, notes
     ("Elasticsearch host", "trino/catalog/hcm.properties → elasticsearch.host", "elasticsearch", "Hostname or IP of the HCM ES cluster, as reachable from the Trino container."),
     ("Elasticsearch port", "hcm.properties → elasticsearch.port", "9200", ""),
     ("TLS (https)?", "hcm.properties → elasticsearch.tls.enabled", "false", "true if the cluster URL starts with https://"),
@@ -234,37 +122,35 @@ CONNECTION = [
     ("Authentication", "hcm.properties → elasticsearch.security", "(none)", "PASSWORD for basic auth; leave empty if open inside the network."),
     ("ES user name", "hcm.properties → elasticsearch.auth.user", "(none)", "Read-only user is enough."),
     ("ES password", "hcm.properties → elasticsearch.auth.password", "(none)", "DO NOT type the password in this sheet. Put it only in hcm.properties on the server (never commit it)."),
-    ("Index / alias prefix", "tools/hcm_datasets.py → IDX", "(none)", "If HCM indexes are tenant- or campaign-prefixed (e.g. na-project-task-index-v1), note the prefix."),
-    ("Document root object", "tools/hcm_datasets.py → F()", "Data", "Mock docs nest fields under 'Data'. If real docs differ, write the root here (or 'none')."),
-    ("Campaign / project filter", "tools/hcm_datasets.py (add a term filter)", "(none - mock has one campaign)", "If the indexes hold several campaigns, which field + value identifies NAM-09-01-IPV-MR_NID?"),
-    ("Time zone of eventTime", "tools/hcm_datasets.py → DAY", "Local time (UTC+2)", "UTC or local? Affects day boundaries and off-hours flags."),
-    ("Campaign start date", "tools/hcm_datasets.py → CAMPAIGN_START", "2026-11-09", "Confirm."),
-    ("Campaign length (days)", "tools/hcm_datasets.py → CAMPAIGN_DAYS", "11", "Confirm."),
+    ("Index names", "tools/datasets.py → CHILD, SITE_DAY", "field-child-v1, field-site-day-v1", "Real index or alias names (sheet 2)."),
+    ("Document root object", "tools/datasets.py", "none (flat fields)", "If real docs nest fields (e.g. under 'Data'), write the root here."),
+    ("Campaign / project filter", "tools/datasets.py (add a WHERE clause)", "(none - one campaign)", "If the indexes hold several campaigns, which field + value identifies NAM-09-01-IPV-MR_NID?"),
+    ("Campaign start date", "tools/datasets.py → CAMPAIGN_START", "2026-11-09", "Day 1. Confirm."),
+    ("Campaign length (days)", "tools/datasets.py → CAMPAIGN_DAYS", "11", "9-19 Nov. Confirm."),
     ("Superset URL", "(server)", "http://localhost:8088", "Where the dashboard will be hosted."),
 ]
 
 CHECKLIST = [
     ("Fill sheet 1 (Connection) - except the password", "Colleague", "Sheet 1"),
-    ("Fill sheet 2 (Indexes): real index name for I1-I8 (I8 AEFI may come from outside HCM)", "Colleague", "Sheet 2"),
+    ("Fill sheet 2 (Indexes): where the child line list and the site-day report live in HCM (or which job will build them)", "Colleague", "Sheet 2"),
     ("Edit trino/catalog/hcm.properties on the server, then: docker compose restart trino", "Colleague", "README → Going live"),
-    ("Check Trino sees the indexes: docker compose exec trino trino --execute \"SHOW TABLES FROM hcm.default\"", "Colleague", "Every real index from sheet 2 should be listed"),
+    ("Check Trino sees the indexes: docker compose exec trino trino --execute \"SHOW TABLES FROM hcm.default\"", "Colleague", "Every index from sheet 2 should be listed"),
     ("Look at one real document per index (query in sheet 2, column G) and fill sheet 3 (Fields)", "Colleague", "Sheet 3"),
-    ("Fill sheet 4 (Value codes): the real HCM value for each dashboard code", "Colleague", "Sheet 4"),
+    ("Fill sheet 4 (Value codes): the real value for each dashboard code", "Colleague", "Sheet 4"),
     ("Check KPI readiness on sheet 5: 'Fields not yet mapped' should be 0 for every KPI", "Colleague", "Sheet 5"),
-    ("Update IDX, F() and value codes in tools/hcm_datasets.py from sheets 2-4 (or send this workbook back to the developer)", "Developer", "tools/hcm_datasets.py"),
-    ("Load real microplan + facility ids + user ids: tools/load_microplan.py", "Developer", "Sheet 6"),
-    ("Regenerate and test datasets: tools/hcm_datasets.py, then tools/test_datasets.sh (every dataset returns rows)", "Developer", "-"),
-    ("Rebuild the dashboard: tools/build_superset.py", "Developer", "-"),
-    ("Spot-check 3 KPIs against HCM's own reports (e.g. doses for one district on one day)", "Both", "Sheet 5, column N"),
+    ("Add every real site to data/sites.csv (code, name, cluster, type, coordinates)", "Developer", "Sheet 6"),
+    ("Update index names and field paths in tools/datasets.py from sheets 2-4", "Developer", "tools/datasets.py"),
+    ("Regenerate and test datasets: tools/datasets.py, then tools/test_datasets.sh (every dataset returns rows)", "Developer", "-"),
+    ("Rebuild the dashboard: ./setup.sh --no-field-data", "Developer", "-"),
+    ("Spot-check 3 KPIs against the field database or HCM reports (e.g. children vaccinated at one site on one day)", "Both", "Sheet 5, column N"),
 ]
 
 MICROPLAN = [
-    ("dim_district", "Boundary List", "boundary_code, region, district, under-5 population, IPV target, MR target, team counts", "Targets for every coverage KPI. Codes must match F01."),
-    ("dim_district_polygon", "data/districts.geojson", "District shapes for choropleths and K30", "Approximate today - replace with official health-district shapes if available."),
-    ("dim_facility", "Facilities List", "Store id, name, type (national / regional / district), capacity, latitude, longitude", "Store ids must match F40 / F44 / F47. Coordinates are mock (district towns) - add real ones."),
-    ("dim_user", "User List (roles + boundary only - no names or phones)", "User id, role, boundary", "User ids must match F03. The mock generates ids; real HCM user UUIDs are needed."),
-    ("dim_product", "tools/load_microplan.py (PRODUCTS)", "Product code, doses per vial, eligible ages, planned wastage", "Confirm vial sizes: MR 10 doses, fIPV 25 fractional doses."),
-    ("dim_campaign_day", "tools/load_microplan.py", "Campaign days and planned cumulative %", "Linear plan over 11 days unless a daily plan is provided."),
+    ("dim_site", "data/sites.csv", "Site code, name, cluster, facility type, coordinates (source noted)", "Every site_code in ES must be here. Two Zambezi sites have approximate coordinates."),
+    ("dim_district", "Microplan Boundary List", "boundary_code, region, district, targets, team counts", "Sites map to districts through dim_site."),
+    ("dim_district_polygon / dim_region_polygon", "data/districts.geojson, data/regions.geojson", "Shapes for the coverage maps", "District shapes are approximate - replace with official ones if available."),
+    ("dim_product", "tools/load_microplan.py (PRODUCTS)", "Doses per vial, eligible ages, allowed wastage", "MR 5 and IPV 10 doses per vial, inferred from the field data - confirm."),
+    ("dim_campaign_day", "tools/load_microplan.py", "Campaign days 1-11", ""),
 ]
 
 
@@ -324,13 +210,13 @@ def main():
     ws = wb.active
     ws.title = "0 Start here"
     title(ws, "HCM IPV + MR dashboard - Elasticsearch plug-in sheet",
-          "Fill this in to connect the Superset dashboard to the real HCM Elasticsearch. Every KPI on the dashboard is listed with the exact ES fields it needs.")
+          "Fill this in to connect the Superset dashboard to the real HCM Elasticsearch. Every KPI on the dashboard is listed with the exact fields it needs. Today the dashboard reads the Zambezi field database loaded into ES.")
     rows = [
         ("How to use", ""),
         ("1", "Sheet 1 Connection - where the ES cluster is (no passwords here)."),
-        ("2", "Sheet 2 Indexes - the real HCM index name for each of the 7 data sources."),
+        ("2", "Sheet 2 Indexes - where each of the 2 data sources lives in HCM (index name, or the job that builds it)."),
         ("3", "Sheet 3 Fields - for each field the dashboard reads, the real HCM field path (or what transform is needed)."),
-        ("4", "Sheet 4 Value codes - the real HCM value for each code the dashboard filters on (e.g. what HCM calls 'administered')."),
+        ("4", "Sheet 4 Value codes - the real HCM value for each code the dashboard filters on (e.g. how HCM writes the vaccine names)."),
         ("5", "Sheet 5 KPIs - read-only catalogue of every KPI, its formula and fields. 'Fields not yet mapped' updates automatically from sheet 3."),
         ("6", "Sheet 6 Microplan - reference data loaded from the microplan (not from ES)."),
         ("7", "Sheet 7 Go-live checklist - the steps in order."),
@@ -341,7 +227,7 @@ def main():
         ("Status", "Pick from the dropdown: Not started · Mapped - same name · Mapped - different name · Needs transform · Not available in HCM."),
         ("", ""),
         ("Progress", ""),
-        ("Indexes mapped", "=COUNTIF('2 Indexes'!$H$6:$H$13,\"Mapped*\")&\" of \"&COUNTA('2 Indexes'!$A$6:$A$13)"),
+        ("Indexes mapped", "=COUNTIF('2 Indexes'!$H$6:$H$7,\"Mapped*\")&\" of \"&COUNTA('2 Indexes'!$A$6:$A$7)"),
         ("Fields mapped", "=COUNTIF('3 Fields'!$K$6:$K$100,\"Mapped*\")&\" of \"&COUNTA('3 Fields'!$A$6:$A$100)"),
         ("Fields needing a transform", "=COUNTIF('3 Fields'!$K$6:$K$100,\"Needs transform\")"),
         ("Fields not available in HCM", "=COUNTIF('3 Fields'!$K$6:$K$100,\"Not available in HCM\")"),
@@ -349,7 +235,7 @@ def main():
         ("KPIs ready (all fields mapped)", "=COUNTIF('5 KPIs'!$L$5:$L$100,0)&\" of \"&COUNTA('5 KPIs'!$A$5:$A$100)"),
         ("", ""),
         ("Contact", "Questions about a field or KPI: send this workbook back with notes in the 'Notes' columns."),
-        ("Note", "All figures in the current dashboard are synthetic test data. Field names in column 'Dashboard expects' are what the mock data uses today."),
+        ("Note", "The dashboard currently shows the Zambezi region MR/IPV child and stock database (field data, 10-11 Nov 2026). Column 'Dashboard reads today' lists the field names loaded from it."),
     ]
     for i, (a, b) in enumerate(rows, start=4):
         ca = ws.cell(row=i, column=1, value=a)
@@ -367,7 +253,7 @@ def main():
     # ---- 1 Connection
     ws = wb.create_sheet("1 Connection")
     title(ws, "1 · Connection", "Where the HCM Elasticsearch is. Fill the yellow column. Never write the password in this workbook.")
-    hdr = ["Parameter", "Where it goes", "Current value (mock)", "Your value", "Notes"]
+    hdr = ["Parameter", "Where it goes", "Current value", "Your value", "Notes"]
     for c, h in enumerate(hdr, 1):
         ws.cell(row=4, column=c, value=h)
     style_header(ws, 4, len(hdr))
@@ -384,13 +270,13 @@ def main():
 
     # ---- 2 Indexes
     ws = wb.create_sheet("2 Indexes")
-    title(ws, "2 · Indexes", "The 7 Elasticsearch indexes (or aliases) the dashboard reads. Fill the real HCM name and status.")
-    hdr = ["Id", "Data source", "What one document is", "Dashboard expects (mock index)", "Real HCM index / alias", "Approx. doc count", "Check query (Trino)", "Status", "Notes"]
+    title(ws, "2 · Indexes", "The 2 Elasticsearch indexes the dashboard reads. Fill the real HCM index / alias (or the job that builds it) and status.")
+    hdr = ["Id", "Data source", "What one document is", "Dashboard reads today", "Real HCM index / alias", "Approx. doc count", "Check query (Trino)", "Status", "Notes"]
     for c, h in enumerate(hdr, 1):
         ws.cell(row=4, column=c, value=h)
     style_header(ws, 4, len(hdr))
-    ex = ["EX", "Delivery tasks", "One document per child per vaccine", "project-task-index-v1", "na-project-task-index-v1", 1250000,
-          'SELECT * FROM hcm.default."na-project-task-index-v1" LIMIT 5', "Mapped - different name", "Example row - format only"]
+    ex = ["EX", "Child line list", "One document per child", "field-child-v1", "na-individual-index-v1", 250000,
+          'SELECT * FROM hcm.default."na-individual-index-v1" LIMIT 5', "Mapped - different name", "Example row - format only"]
     for c, v in enumerate(ex, 1):
         body(ws, 5, c, v, fill=EXAMPLE, italic=True, color="666666")
     for i, (iid, name, what, mock, note) in enumerate(INDEXES, start=6):
@@ -403,21 +289,21 @@ def main():
         body(ws, i, 7, f'=IF(E{i}="","",CONCATENATE("SELECT * FROM hcm.default.""",E{i},""" LIMIT 5"))')
         body(ws, i, 8, "Not started", fill=FILL_IN)
         body(ws, i, 9, note)
-    status_validation(ws, "H6:H13")
-    status_colors(ws, "H6:H13", "H", 6)
+    status_validation(ws, f"H6:H{5 + len(INDEXES)}")
+    status_colors(ws, f"H6:H{5 + len(INDEXES)}", "H", 6)
     widths(ws, [6, 22, 40, 28, 32, 14, 52, 24, 60])
     ws.freeze_panes = "C6"
 
     # ---- 3 Fields
     ws = wb.create_sheet("3 Fields")
-    title(ws, "3 · Fields", "Every field the dashboard reads, by index. Paths are relative to the document root (mock: Data.<field>). Fill the yellow columns.")
+    title(ws, "3 · Fields", "Every field the dashboard reads, by index. Paths are relative to the document root (today: flat fields, no root object). Fill the yellow columns.")
     hdr = ["Id", "Index", "Dashboard expects (field path)", "ES type", "Meaning / format", "Example value", "Used by KPIs",
            "Real HCM field path", "Real example value", "Transform needed (if any)", "Status", "Notes"]
     for c, h in enumerate(hdr, 1):
         ws.cell(row=4, column=c, value=h)
     style_header(ws, 4, len(hdr))
-    ex = ["EX", "I1", "productCode", "keyword", "Vaccine code", "MR", "K01 K02", "Data.productVariantId", "PVAR-MR-10D",
-          "Map PVAR-MR-10D → MR, PVAR-IPV-F → IPV", "Needs transform", "Example row - format only"]
+    ex = ["EX", "I2", "vaccine", "keyword", "Vaccine code", "MR", "K01 K03", "Data.productVariantId", "PVAR-MR-5D",
+          "Map PVAR-MR-5D → MR, PVAR-IPV-10D → IPV", "Needs transform", "Example row - format only"]
     for c, v in enumerate(ex, 1):
         body(ws, 5, c, v, fill=EXAMPLE, italic=True, color="666666")
     for i, f in enumerate(FIELDS, start=6):
@@ -447,7 +333,7 @@ def main():
     for c, h in enumerate(hdr, 1):
         ws.cell(row=4, column=c, value=h)
     style_header(ws, 4, len(hdr))
-    ex = ["EX", "administrationStatus", "ADMINISTRATION_SUCCESS", "Dose given", "DELIVERED", "Example row - format only", "Mapped - different name"]
+    ex = ["EX", "vaccine", "IPV", "Inactivated polio vaccine", "bOPV-IPV", "Example row - format only", "Mapped - different name"]
     for c, v in enumerate(ex, 1):
         body(ws, 5, c, v, fill=EXAMPLE, italic=True, color="666666")
     for i, (fid, field, code, meaning) in enumerate(CODES, start=6):

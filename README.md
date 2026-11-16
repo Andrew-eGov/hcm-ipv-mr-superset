@@ -1,41 +1,40 @@
 # HCM IPV + MR Campaign Dashboard (Superset)
 
-This is a live Superset 6.1 dashboard for the Namibia integrated campaign, `NAM-09-01-IPV-MR_NID` (single round, 9–19 Nov 2026, delivering measles-rubella (MR) and fractional IPV (fIPV)).
+This is a live Superset 6.1 dashboard for the Namibia integrated campaign, `NAM-09-01-IPV-MR_NID` (single round, 9–19 Nov 2026, delivering measles-rubella (MR) and IPV). It currently shows the **Zambezi region MR/IPV child and stock database** (field data for 10–11 Nov: Bukalo, Katima and Sangwali clusters, 23 sites), loaded into Elasticsearch.
 
 **Open:** http://localhost:8088/superset/dashboard/hcm-ipv-mr-namibia/ (local login `admin` / `admin`)
 
-**Static review snapshot:** https://hcm-ipv-mr-review.vercel.app. This is a standalone page (`static/`) with the same tabs, filters and maps. Its data is a frozen export of the mock data, so it is not live. To refresh it, run `tools/export_static.py`, then `npx vercel deploy --prod` from `static/`.
+**Static review page:** `static/` is a standalone page with the same tabs, filters and maps, built from a frozen export (`tools/export_static.py` → `static/data.json`, aggregates only). `static/data.json` is git-ignored because it holds field data. The public copy at https://hcm-ipv-mr-review.vercel.app is only updated on the project owner's say-so.
 
 ## Architecture
 
 ```
-HCM Elasticsearch ──► Trino (elasticsearch connector, raw_query) ──┐
-  project-task / individual / household /                          ├─► Superset 6.1 (28+ virtual datasets, 91 charts)
-  stock / service-task / pgr / downsync                            │      60 s cache, 5 min auto-refresh
-Postgres "microplan" ──► Trino (postgresql connector) ─────────────┘
-  targets, users (roles only), stores, district shapes
+Field database (.xlsx) ──► tools/load_field_data.py ──► Elasticsearch
+                                                          field-child-v1     (one doc per child)
+                                                          field-site-day-v1  (one doc per site × date × vaccine)
+Elasticsearch ──► Trino (elasticsearch connector) ──┐
+Postgres "microplan" ──► Trino (postgresql) ────────┴──► Superset 6.1 (13 virtual datasets, 73 charts)
+  dim_site, districts, region/district shapes, products       60 s cache, 5 min auto-refresh
 ```
 
-* **Real time with no ETL.** Each chart's aggregation runs inside Elasticsearch: Trino's `raw_query` passes ES composite, terms, cardinality and geotile aggregations straight through. A plain Trino scan of 600k documents takes about 17 s; the pushed-down aggregation takes about 0.2 s.
-* **Joins happen in Trino.** ES results are joined to the microplan tables (targets, users, stores, polygons) at query time.
-* **Every tab has a map:**
-  * district choropleths (deck.gl Polygon)
-  * clustered event layers (deck.gl Screen Grid over ES geotile centroids), which re-aggregate at every zoom level
-  * point layers for missed children, GPS issues, checklists and complaints
-  * store status and stock-movement arcs
+* **Real time with no ETL inside Superset.** Charts query ES through Trino; the field indexes are small, so plain scans return in about a second.
+* **Joins happen in Trino.** ES rows join to `dim_site` (site → cluster → district → region, facility type, coordinates) and `dim_product` (doses per vial, allowed wastage).
+* **Maps show Namibia only.** Superset maps use a transparent basemap, so only Namibia's region and district shapes are drawn; the review page masks everything outside Namibia. Coverage maps share one sequential scale with a legend.
 
 ## Tabs
 
+The dashboard has four tabs. Supervision and Complaints are hidden for this release. MR and IPV are always reported separately; nothing on the dashboard blends the two.
+
 | Tab | Contents |
 |---|---|
-| Overview | Frontline sync strip; MR and fIPV coverage gauges; doses administered; % of children 9–59 m who got both vaccines; % vs plan; wastage; stores at risk; complaints; downsync; data-quality rate; zero-dose children and share; AEFI reported, serious, rate per 100k doses, serious investigated; coverage map; event clusters; zero-dose clusters; AEFI per day; coverage by region; planned vs actual |
-| Coverage | Coverage by district and vaccine; 3 choropleths (MR, fIPV, vs plan); event clusters; household heatmap; planned vs actual; daily doses by delivery mode; age groups; delivery-mode split; missed opportunities by reason and on a map; co-administration by district; zero-dose share by district (bar + map); zero-dose clusters; AEFI map by severity; AEFI by symptom, by suspected vaccine, per 100k doses map; gender; household outcomes; summary table; zero-dose and AEFI table |
-| Inventory | Warehouse sync strip; vials and syringes in hand; receipt discrepancy; days of stock; wastage vs 5%; store status map; stock-flow arcs; wastage and days-of-stock choropleths; Sankey flow; issued vs returned; discrepancy report; stock position table |
-| Data Quality | Downsync strip; 6 data-quality counters (no GPS, accuracy > 100 m, outside the assigned district, duplicates, incomplete records, off-hours); district table; data-quality choropleth; low-accuracy point map; users with more than 120 doses a day; teams with fewer than 20 doses a day; sync and downsync rates by district |
-| Supervision | Supervisor sync strip; checklist completion at team, district, regional and national level; checklist findings; daily submissions; checklist location map; completion choropleth; frontline sync by district |
-| Complaints | Totals; resolution rate and hours; complaints by type and status; daily trend; location map; complaints per 10k doses by district; district table |
+| Overview | Per vaccine: children vaccinated, target, coverage of target, wastage, vials opened, sites reporting; pie of vaccinated vs remaining to target; coverage by region and by district; coverage maps by district; health-facility map by type; gender distribution |
+| Coverage | Coverage maps by region; coverage by region, district, cluster and site; children vaccinated by age group (labels as in the source); planned vs actual (cumulative); children per day; children by vaccines received; site summary table |
+| Inventory | Stores and sites with a stock entry; vials in hand in the district store; campaign day; vials received, additional, opened, returned unopened, issued (net) and wastage per vaccine; "x days of stock · Day n of 11"; days of stock by site with a campaign-days-remaining line; wastage by district and by site with the 5% allowed line; cumulative vials issued vs needed by site; full-width Sankey (national > regional > district store > site > opened / returned); stock maps; stock table by site and day |
+| Data Quality | Reporting completeness; stock entries not balanced; line list vs aggregate; children above target; more children than doses; approximate locations; issues by cluster; data-quality map; missing reports; site-days with issues |
 
-**Filters:** Region → District (cascading), Vaccine, Delivery mode (fixed post / house to house / transit post) and Campaign date. Each filter is scoped only to the charts whose dataset has that column. Coverage figures and maps are cumulative to date, so the date filter applies only to the daily charts.
+**Planned figures are scoped to the data.** Target is the sum of the daily site targets for the sites and days that uploaded data, so coverage is never compared with the national plan, and every filter changes numerator and denominator together.
+
+**Filters:** Region → District → Cluster → Site (cascading), Vaccine (empty = MR + IPV) and Campaign date. Each filter applies only to charts whose dataset has that column.
 
 ## Files
 
@@ -43,18 +42,21 @@ Postgres "microplan" ──► Trino (postgresql connector) ──────�
 |---|---|
 | `docker-compose.yml` | Elasticsearch 8.19, Postgres 16, Redis, Trino 484, Superset 6.1 |
 | `trino/catalog/hcm.properties` | **Point this at the real HCM ES cluster** (host, port, auth) |
-| `tools/build_boundaries.py` | Builds approximate district polygons (see Assumptions) → `data/districts.geojson` |
-| `tools/load_microplan.py` | Loads the microplan `.xlsx` and shapes into Postgres |
-| `tools/generate_mock.py` | Mock HCM documents (days 1–6), including deliberate data-quality noise |
-| `tools/hcm_datasets.py` | All dataset SQL. **Index and field names are defined in one place** (`IDX`, `F`) |
-| `tools/build_superset.py` | Idempotent build of the database connection, datasets, charts and dashboard through the REST API |
-| `tools/test_datasets.sh` | Runs every dataset through Trino and reports row counts and timing |
+| `tools/load_field_data.py` | Loads the field-database workbook into ES and `data/sites.csv` into `dim_site` |
+| `data/sites.csv` | Sites: code, name, cluster, facility type, coordinates and where they came from |
+| `tools/build_boundaries.py` | Builds approximate district polygons → `data/districts.geojson` |
+| `tools/load_microplan.py` | Loads the microplan `.xlsx`, shapes and products into Postgres |
+| `tools/datasets.py` | All dataset SQL. **Index names and fields are defined in one place** |
+| `tools/build_superset.py` | Idempotent build of the connection, datasets, charts and dashboard through the REST API |
+| `tools/test_datasets.sh` | Runs every dataset through Trino and reports row counts |
+| `tools/export_static.py` | Exports aggregates for the review page |
+| `tools/legacy/` | The earlier synthetic-data build (mock generator, HCM-shaped datasets), kept for reference |
 
 ## Rebuild from scratch
 
-**Quickest:** run `./setup.sh` (add `--no-mock` once real HCM ES is configured). It does everything below. New to the project? Read `START_HERE.md` first.
+**Quickest:** run `./setup.sh`. It does everything below. New to the project? Read `START_HERE.md` first.
 
-Requires Docker (8 GB RAM for the VM) and Python 3.9 or later. The microplan workbook is **not in this repo**, because it contains the user list. Put it next to the repo folder, or set `MICROPLAN_XLSX=/path/to/microplan.xlsx`.
+Requires Docker (8 GB RAM for the VM) and Python 3.9 or later. Two workbooks are **not in this repo**: the microplan (it contains the user list) and the field database (field data). Put both next to the repo folder, or set `MICROPLAN_XLSX=` and `FIELD_XLSX=`.
 
 ```bash
 cp .env.example .env                                   # set SUPERSET_SECRET_KEY
@@ -62,37 +64,31 @@ python3 -m venv tools/.venv && tools/.venv/bin/pip install -r tools/requirements
 docker compose up -d --build
 tools/.venv/bin/python -I tools/build_boundaries.py
 tools/.venv/bin/python -I tools/load_microplan.py
-tools/.venv/bin/python -I tools/generate_mock.py      # skip when connected to real HCM ES
+tools/.venv/bin/python -I tools/load_field_data.py     # --sites-only when connected to real HCM ES
 tools/.venv/bin/python -I tools/build_superset.py
 ```
 
-## Going live on real HCM data (plugging in Elasticsearch)
+## Going live on real HCM data
 
-1. Edit `trino/catalog/hcm.properties`: set the host and port, and uncomment the TLS and auth lines if the cluster is secured. Keep real credentials out of git: edit the file locally and don't commit it, or use `${ENV:VAR}` substitution. Then run `docker compose restart trino`.
-   To check the connection:
-   `docker compose exec trino trino --execute "SHOW TABLES FROM hcm.default"`
-   The real HCM indexes should be listed.
-2. Compare the real index and field names with `IDX` and `F(...)` in `tools/hcm_datasets.py`. Fields the mock assumes:
-   * `Data.productCode`, `administrationStatus`, `reasonNotAdministered`, `deliveryMode`, `teamId`, `teamType`
-   * `individualId`, `householdId`, `ageInMonths`
-   * `geoPoint`, `latitude`, `longitude`, `locationAccuracy`
-   * `boundaryHierarchyCode.district`, `eventTime`, `createdBy`
-   * For stock: `transactionType`, `senderId`, `receiverId`, `waybillNumber`, `quantity`
-3. Run `tools/hcm_datasets.py` to regenerate `sql/datasets/*.sql`, then `tools/test_datasets.sh`. Every dataset should return rows in a few seconds.
-4. Re-run `tools/build_superset.py`. Skip `generate_mock.py`, and remove the bundled `elasticsearch` service if you don't need it.
+1. Edit `trino/catalog/hcm.properties` (host, port, TLS, auth). Keep credentials out of git. Then `docker compose restart trino` and check with
+   `docker compose exec trino trino --execute "SHOW TABLES FROM hcm.default"`.
+2. The dashboard reads two shapes of data: a child line list and a daily site report (per vaccine: target, children by age group, vials received / additional / opened / returned unopened). Map HCM onto them with `docs/HCM_Elastic_Plug-in_Sheet.xlsx`, then update the index names and fields in `tools/datasets.py`. If HCM has no daily site report, a small aggregation job that writes `field-site-day-v1`-shaped documents is the simplest route.
+3. Add every real site to `data/sites.csv`, run `./setup.sh --no-field-data`, then `tools/test_datasets.sh`.
 
 ## Assumptions to confirm
 
-* **District shapes are approximate.** Namibia's 36 health districts have no public shapefile. Each region (geoBoundaries / Natural Earth ADM1) is split into Voronoi cells around the district seat towns, which were geocoded with OSM Nominatim. Kavango East/West and the Andara strip are derived the same way. Replace `data/districts.geojson` with official shapes when available.
-* **Eligibility (WHO):** fIPV 4–59 months and MR 9 months to under 10 years, matching the microplan targets (95% of U5 and U10). Planned wastage is 5% for both vaccines, per your instruction. The microplan sheet itself uses 10% for MR doses.
-* **Vial sizes:** MR 10 doses, fIPV 25 fractional doses (5-dose vial at 0.1 mL). Both are set in the `dim_product` table.
-* **Team types map to delivery modes:** fixed health-facility team → Fixed post, mobile/outreach → House to house, temporary fixed → Transit post.
-* **Store locations and warehouse users are mocked.** Stores are placed at the district seat towns. Warehouse sync is measured as stores with at least one transaction, because the user list has no warehouse managers.
-* **Map base tiles use OpenStreetMap,** which is fine for a pilot. For production, use a tile provider (MapTiler, Stadia or Mapbox) and change `TILE` in `build_superset.py`.
+* **Doses per vial: MR 5, IPV 10.** Inferred from the field data (about 5 children per opened MR vial and 10 per IPV vial). With 10-dose MR vials, MR wastage would be about 50%. Set in `dim_product` (`tools/load_microplan.py`).
+* **Campaign day comes from the date** (9 Nov = day 1, 11 days). The workbook's sheets disagree: Children calls 10 Nov day 1; Agg and Stock call it day 2.
+* **Vials in hand in the district store** = vials returned unopened on the latest day; the workbook has no store stock. Days of stock = that ÷ average daily vials opened (last 3 days).
+* **Sankey store layers** (national, regional, district) are not in the field data; they are the sums of the site layer.
+* **Facility type** comes from the site name (Health Centre / Clinic); other sites are outreach points, and Masokotwani is a school. Two sites (Homba Clinic, Nchichimani) have no coordinates in the source and none in OpenStreetMap, so they sit at their cluster centre.
+* **All Zambezi clusters sit in the microplan district Katima Mulilo**, so district charts show one bar until other districts upload.
+* **Gender is not in the field database**, so the gender pies show "Not recorded".
+* **District shapes are approximate** (Voronoi cells around district seats inside geoBoundaries regions). Replace `data/districts.geojson` with official shapes when available.
 * **Row-level security** is not configured yet (open by design for now).
 
 ## Data credits
 
 * Region boundaries: [geoBoundaries](https://www.geoboundaries.org) NAM ADM1 (CC BY 4.0, Natural Earth source)
-* District seat towns geocoded with [OpenStreetMap Nominatim](https://nominatim.openstreetmap.org) (© OpenStreetMap contributors, ODbL)
-* All HCM records in Elasticsearch are **synthetic** (`tools/generate_mock.py`), including zero-dose flags and the `aefi-index-v1` AEFI cases. HCM does not capture AEFI yet.
+* District seats and site locations geocoded with [OpenStreetMap Nominatim](https://nominatim.openstreetmap.org) (© OpenStreetMap contributors, ODbL)
+* Field data: Zambezi region MR/IPV child and stock database (10–11 Nov 2026), supplied by the project owner; not in git.

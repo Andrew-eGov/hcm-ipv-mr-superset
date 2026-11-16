@@ -1,0 +1,25 @@
+WITH b AS (
+SELECT s.region, s.district, s.boundary_code, s.cluster, s.site_code, s.site_name, s.facility_type, s.latitude, s.longitude,
+       f.vaccine AS product, f.vaccine AS product_label,
+       CAST(f.event_date AS date) AS event_date, f.campaign_day, f.source_campaign_day,
+       CAST(f.target AS double) AS target,
+       CAST(f.total_vaccinated AS double) AS vaccinated,
+       CAST(f.vials_received AS double) AS vials_received,
+       CAST(f.additional_vials_received AS double) AS additional_vials_received,
+       CAST(f.vials_opened AS double) AS vials_opened,
+       CAST(f.vials_returned_unopened AS double) AS vials_returned_unopened,
+       CAST(coalesce(f.vials_received, 0) + coalesce(f.additional_vials_received, 0) - coalesce(f.vials_returned_unopened, 0) AS double) AS vials_issued_net,
+       CAST(p.doses_per_unit AS double) AS doses_per_vial,
+       CAST(f.vials_opened * p.doses_per_unit AS double) AS doses_opened,
+       f.target / CAST(p.doses_per_unit AS double) * (1 + p.planned_wastage_pct / 100.0) AS vials_needed,
+       CAST(coalesce(f.vials_received, 0) + coalesce(f.additional_vials_received, 0) - coalesce(f.vials_opened, 0) - coalesce(f.vials_returned_unopened, 0) AS double) AS stock_unbalanced_vials,
+       f.vaccinated_6_11m, f.vaccinated_14w_11m, f.vaccinated_12_59m, f.vaccinated_5_10y
+FROM hcm.default."field-site-day-v1" f
+JOIN microplan.public.dim_site s ON s.site_code = f.site_code
+JOIN microplan.public.dim_product p ON p.product_code = f.vaccine),
+ d AS (SELECT DISTINCT event_date FROM b),
+ v AS (SELECT DISTINCT product FROM b)
+SELECT s.region, s.district, s.cluster, s.site_code, s.site_name, s.facility_type, v.product, d.event_date,
+       CASE WHEN b.site_code IS NULL THEN 0 ELSE 1 END AS reported, 1 AS expected
+FROM microplan.public.dim_site s CROSS JOIN d CROSS JOIN v
+LEFT JOIN b ON b.site_code = s.site_code AND b.event_date = d.event_date AND b.product = v.product

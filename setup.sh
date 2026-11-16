@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
 # One-command local setup for the HCM IPV + MR dashboard.
 #
-#   ./setup.sh                        # full stack with synthetic data
-#   ./setup.sh --no-mock              # skip mock data (real HCM ES configured in trino/catalog/hcm.properties)
-#   MICROPLAN_XLSX=/path/to/microplan.xlsx ./setup.sh
+#   ./setup.sh                        # full stack, loads the Zambezi field database into Elasticsearch
+#   ./setup.sh --no-field-data        # skip the workbook (real HCM ES configured in trino/catalog/hcm.properties)
+#   MICROPLAN_XLSX=/path/to/microplan.xlsx FIELD_XLSX=/path/to/field-database.xlsx ./setup.sh
 #
 # Needs: Docker (VM with >= 8 GB RAM), Python 3.9+, curl. Safe to re-run.
 set -euo pipefail
 cd "$(dirname "$0")"
 
-MOCK=1
-[[ "${1:-}" == "--no-mock" ]] && MOCK=0
+FIELD=1
+[[ "${1:-}" == "--no-field-data" ]] && FIELD=0
 export MICROPLAN_XLSX="${MICROPLAN_XLSX:-$(cd .. && pwd)/Copy of Namibia_IPV_MR_Microplan.xlsx}"
+export FIELD_XLSX="${FIELD_XLSX:-$(cd .. && pwd)/Zambezi_region_MR_IPV_child_and_stock_database_VAA_updated.xlsx}"
 
 step() { printf '\n\033[1;34m==> %s\033[0m\n' "$*"; }
 fail() { printf '\n\033[1;31mERROR: %s\033[0m\n' "$*" >&2; exit 1; }
@@ -23,6 +24,9 @@ command -v python3 >/dev/null || fail "python3 is not installed"
 [[ -f "$MICROPLAN_XLSX" ]] || fail "Microplan workbook not found at: $MICROPLAN_XLSX
   Ask the project owner for it (it is not in git - it contains the user list),
   then put it next to this folder or run: MICROPLAN_XLSX=/path/to/file.xlsx ./setup.sh"
+(( ! FIELD )) || [[ -f "$FIELD_XLSX" ]] || fail "Field database workbook not found at: $FIELD_XLSX
+  Ask the project owner for it (it is not in git - it is field data),
+  then put it next to this folder or run: FIELD_XLSX=/path/to/file.xlsx ./setup.sh"
 mem=$(docker info --format '{{.MemTotal}}')
 (( mem > 7000000000 )) || echo "WARNING: Docker has $((mem / 1000000000)) GB RAM; 8 GB is recommended (Docker Desktop > Settings > Resources)."
 
@@ -59,13 +63,16 @@ step "District shapes + microplan -> Postgres"
 tools/.venv/bin/python -I tools/build_boundaries.py
 tools/.venv/bin/python -I tools/load_microplan.py
 
-if (( MOCK )); then
-  step "Synthetic HCM data -> Elasticsearch (~2 min)"
-  tools/.venv/bin/python -I tools/generate_mock.py 2>/dev/null | tail -9
+if (( FIELD )); then
+  step "Field database (Zambezi child and stock workbook) -> Elasticsearch, sites -> Postgres"
+  tools/.venv/bin/python -I tools/load_field_data.py
+else
+  step "Sites -> Postgres"
+  tools/.venv/bin/python -I tools/load_field_data.py --sites-only
 fi
 
 step "Datasets, charts and dashboard -> Superset"
-tools/.venv/bin/python -I tools/hcm_datasets.py
+tools/.venv/bin/python -I tools/datasets.py
 tools/.venv/bin/python -I tools/build_superset.py 2>&1 | grep -v -i warn | tail -2
 
 printf '\n\033[1;32mDone.\033[0m Open http://localhost:8088/superset/dashboard/hcm-ipv-mr-namibia/  (login admin / admin - change it before sharing the server)\n'

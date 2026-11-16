@@ -1,6 +1,6 @@
 -- Microplan reference data (rebuilt on every load)
 DROP TABLE IF EXISTS dim_district, dim_district_polygon, dim_region, dim_facility,
-                     dim_user, dim_product, dim_campaign_day CASCADE;
+                     dim_user, dim_product, dim_campaign_day, dim_region_polygon CASCADE;
 
 CREATE TABLE dim_district (
   boundary_code text PRIMARY KEY, country text, region text, district text,
@@ -15,6 +15,9 @@ CREATE TABLE dim_district_polygon (
 );
 CREATE TABLE dim_region (
   region text PRIMARY KEY, u5_population double precision, ipv_target double precision, mr_target double precision, geojson text
+);
+CREATE TABLE dim_region_polygon (
+  region text, part_no int, polygon text
 );
 CREATE TABLE dim_facility (
   facility_code text PRIMARY KEY, facility_name text, facility_type text, level int,

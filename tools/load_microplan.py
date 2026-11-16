@@ -33,10 +33,12 @@ CAMPAIGN_DAYS = 11
 
 PRODUCTS = [
     # code, name, kind, unit, doses_per_unit, min_age_m, max_age_m, wastage_pct
-    ("MR", "Measles-Rubella vaccine", "VACCINE", "vial", 10, 9, 119, 5.0),
-    ("IPV", "Inactivated polio vaccine (fIPV, 0.1 mL ID)", "VACCINE", "vial", 25, 4, 59, 5.0),
+    # Vial sizes inferred from the Zambezi field database (children per opened vial ~5 for MR, ~10 for IPV).
+    # Open question with the product owner - change here only.
+    ("MR", "Measles-Rubella vaccine", "VACCINE", "vial", 5, 6, 119, 5.0),
+    ("IPV", "Inactivated polio vaccine (IPV)", "VACCINE", "vial", 10, 3, 59, 5.0),
     ("ADS_05", "AD syringe 0.5 mL (MR)", "DEVICE", "piece", 1, None, None, 5.0),
-    ("ADS_01", "AD syringe 0.1 mL (fIPV)", "DEVICE", "piece", 1, None, None, 5.0),
+    ("ADS_01", "AD syringe 0.1 mL (IPV)", "DEVICE", "piece", 1, None, None, 5.0),
     ("RUP_5", "Reconstitution syringe 5 mL (MR)", "DEVICE", "piece", 1, None, None, 5.0),
 ]
 
@@ -130,6 +132,13 @@ def main():
     for r in regs.values():
         r["geojson"] = json.dumps(regions_geo[r["region"]]["geometry"])
     insert("dim_region", list(regs.values()))
+    rpolys = []
+    for r in regs.values():
+        g = shape(json.loads(r["geojson"]))
+        for k, part in enumerate(list(g.geoms) if g.geom_type == "MultiPolygon" else [g]):
+            rpolys.append(dict(region=r["region"], part_no=k,
+                               polygon=json.dumps([[round(c[0], 4), round(c[1], 4)] for c in part.exterior.coords])))
+    insert("dim_region_polygon", rpolys)
     insert("dim_facility", facilities)
     insert("dim_user", users)
     insert("dim_product", [dict(zip(("product_code", "product_name", "kind", "unit", "doses_per_unit",
