@@ -447,6 +447,13 @@ def define(days_remaining):
 
     # ---------------- Data quality
     T = "Data Quality"
+    g = [F("user_group", "IN", ["Vaccinators downsynced"])]
+    big(T, 0, 4, "DQ: vaccinators total", "field_sync", M("COUNT(*)", "Vaccinators"), "Vaccinators downsynced: total",
+        ",d", g, note="synthetic until HCM is connected")
+    big(T, 0, 4, "DQ: vaccinators downsynced", "field_sync", M("SUM(synced)", "Downsynced"),
+        "Vaccinators downsynced at least once", ",d", g, note="synthetic until HCM is connected")
+    big(T, 0, 4, "DQ: downsync rate", "field_sync", M("AVG(CAST(synced AS double))", "Rate"), "Downsync rate", ".1%", g,
+        note="synthetic until HCM is connected")
     big(T, 1, 2, "DQ: site-day reports received", "field_reporting", M(PCT("SUM(reported)", "SUM(expected)"), "Received"),
         "Site-day reports received (of expected)", ".0%", [TIME_F()])
     for name, col, label in (("stock not balanced", "stock_unbalanced", "Stock entries not balanced (received ≠ opened + returned)"),
@@ -477,7 +484,15 @@ def define(days_remaining):
           formats={"event_date": {"d3TimeFormat": "%d %b"}},
           cond=[{"colorScheme": "#EFA1AA", "column": "Vials not accounted for", "operator": "!=", "targetValue": 0}],
           order=M("SUM(stock_unbalanced_vials)", "Vials not accounted for"), height=70)
+    bar(T, "4b", 6, "DQ: frontline sync rate by district (synthetic)", "field_sync", "district",
+        [M("AVG(CAST(synced AS double))", "Sync rate")], fmt=".0%", filters=[F("user_group", "IN", ["Frontline workers"])],
+        sort_by_metric=True, x_axis_sort_asc=True, y_max=1)
+    bar(T, "4b", 6, "DQ: downsync rate by district (synthetic)", "field_sync", "district",
+        [M("AVG(CAST(synced AS double))", "Downsync rate")], fmt=".0%",
+        filters=[F("user_group", "IN", ["Vaccinators downsynced"])], x_axis_sort_asc=True, y_max=1)
     markdown(T, 5, 12, 14, BANNER.format(text=(
+        "Sync figures are synthetic: the field database has no app sync records, so each frontline user in the "
+        "microplan gets a stable synthetic status until HCM is connected. "
         "Campaign day is taken from the date (9 Nov = day 1). The source workbook numbers days differently by sheet: "
         "Children calls 10 Nov day 1, while Agg and Stock call it day 2. Sites with approximate location have no "
         "coordinates in the source and could not be found in OpenStreetMap; they are placed at their cluster centre.")))

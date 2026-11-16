@@ -14,6 +14,7 @@ from pathlib import Path
 
 SITE_DAY = 'hcm.default."field-site-day-v1"'
 CHILD = 'hcm.default."field-child-v1"'
+SYNC = 'hcm.default."field-user-sync-v1"'
 MP = "microplan.public"
 CAMPAIGN_START = "DATE '2026-11-09'"
 CAMPAIGN_DAYS = 11
@@ -213,6 +214,19 @@ FROM {MP}.dim_site s CROSS JOIN d CROSS JOIN v
 LEFT JOIN b ON b.site_code = s.site_code AND b.event_date = d.event_date AND b.product = v.product"""
 
 
+def ds_sync():
+    """App sync per frontline user (SYNTHETIC until HCM is connected), for districts that uploaded field data:
+    'Frontline workers' = vaccinators and registrars who synced at least once; 'Vaccinators downsynced'."""
+    return f"""
+SELECT u.region, u.district, 'Frontline workers' AS user_group, u.user_id AS entity_id, y.synced, y.synthetic
+FROM {SYNC} y JOIN {MP}.dim_user u ON u.user_id = y.user_id
+WHERE u.district IN (SELECT DISTINCT district FROM {MP}.dim_site)
+UNION ALL
+SELECT u.region, u.district, 'Vaccinators downsynced', u.user_id, y.downsynced, y.synthetic
+FROM {SYNC} y JOIN {MP}.dim_user u ON u.user_id = y.user_id
+WHERE y.role_group = 'VACCINATOR' AND u.district IN (SELECT DISTINCT district FROM {MP}.dim_site)"""
+
+
 DATASETS = {
     # name: (function, temporal column or None)
     "field_site_day": (ds_site_day, "event_date"),
@@ -228,6 +242,7 @@ DATASETS = {
     "field_campaign_day": (ds_campaign_day, None),
     "field_dq": (ds_dq, "event_date"),
     "field_reporting": (ds_reporting, "event_date"),
+    "field_sync": (ds_sync, None),
 }
 
 if __name__ == "__main__":

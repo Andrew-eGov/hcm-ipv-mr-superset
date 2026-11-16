@@ -451,6 +451,20 @@ R.Inventory = () => {
     },
   ];
 };
+function syncRows(g) { return D.sync.filter(r => r.g === g && (!F.region || r.region === F.region) && (!F.district || r.district === F.district)); }
+function syncStrip(title, g) {
+  const rs = syncRows(g), tot = sum(rs, r => r.total), ok = sum(rs, r => r.synced);
+  return `<div class="strip"><div class="lbl"><span>⟲</span><div>${title}<small>Synthetic until HCM is connected</small></div></div>
+  <div class="m k"><div class="t">Total</div><div class="v">${fmt(tot)}</div></div>
+  <div class="m k"><div class="t">Downsynced at least once</div><div class="v">${fmt(ok)}</div></div>
+  <div class="m k"><div class="t">Downsync rate</div><div class="v">${pct(ok / tot, 1)}</div>${status(ok / tot, .95, .85)}</div></div>`;
+}
+function syncBars(id, g, label) {
+  const rs = syncRows(g), ds = rs.map(r => r.district).sort((a, b) => { const v = d => { const x = rs.find(r => r.district === d); return x.synced / x.total; }; return v(a) - v(b); });
+  draw(id, { tooltip: Object.assign(base().tooltip, pctTip), xAxis: axisCat(ds), yAxis: axisVal(v => pct(v), { max: 1 }),
+    series: [barS(label, ds.map(d => { const x = rs.find(r => r.district === d); return +(x.synced / x.total).toFixed(4); }), "--s1",
+      { label: { show: true, position: "top", formatter: x => pct(x.value, 1), color: css("--ink-2") } })] });
+}
 function dqRows() {
   const L = Object.fromEntries(D.listed.map(r => [r.code + r.d, r]));
   return rows(null).map(r => { const l = L[r.code + r.d] || {}, listed = r.p === "MR" ? (l.mr || 0) : (l.ipv || 0), dop = r.opened * r.dpv;
@@ -466,6 +480,7 @@ R["Data Quality"] = () => {
   const q = dqRows(), rep = reporting(), approx = D.sites.filter(s => siteOk(s) && /Approx/.test(s.src)).length;
   const cnt = f => q.filter(f).length;
   return [
+    syncStrip("Vaccinators downsynced", "Vaccinators downsynced"),
     `<div class="grid">${[
       kpi("c2", "Site-day reports received (of expected)", pct(rep.filter(r => r.ok).length / rep.length), status(rep.filter(r => r.ok).length / rep.length, .95, .8)),
       kpi("c2", "Stock entries not balanced (received ≠ opened + returned)", fmt(cnt(r => r.unb !== 0))),
@@ -478,7 +493,8 @@ R["Data Quality"] = () => {
     `<div class="grid">${card("c12", "dqMap", "Map: sites by most serious data-quality issue", "", "map")}</div>`,
     `<div class="grid">${card("c12", "dqMiss", "Site-day reports missing", "", "table")}</div>`,
     `<div class="grid">${card("c12", "dqTbl", "Site-days with issues", "", "table")}</div>`,
-    `<div class="grid"><div class="card c12 banner">Campaign day is taken from the date (9 Nov = day 1). The source workbook numbers days differently by sheet: Children calls 10 Nov day 1, while Agg and Stock call it day 2 (${cnt(r => r.dayMismatch)} site-days affected). Sites with approximate location have no coordinates in the source and could not be found in OpenStreetMap; they sit at their cluster centre.</div></div>`,
+    `<div class="grid">${card("c6", "dqSync", "Frontline sync rate by district", "Synthetic: vaccinators and registrars who synced at least once")}${card("c6", "dqDown", "Downsync rate by district", "Synthetic: vaccinators who downsynced at least once")}</div>`,
+    `<div class="grid"><div class="card c12 banner">Campaign day is taken from the date (9 Nov = day 1). The source workbook numbers days differently by sheet: Children calls 10 Nov day 1, while Agg and Stock call it day 2 (${cnt(r => r.dayMismatch)} site-days affected). Sync figures are synthetic: the field database has no app sync records. Sites with approximate location have no coordinates in the source and could not be found in OpenStreetMap; they sit at their cluster centre.</div></div>`,
     () => {
       const cl = uniq(D.sites.filter(s => siteOk(s)).map(s => s.cluster));
       draw("dqRep", { tooltip: Object.assign(base().tooltip, pctTip), xAxis: axisCat(cl), yAxis: axisVal(v => pct(v), { max: 1 }),
@@ -489,6 +505,7 @@ R["Data Quality"] = () => {
       const order = ["Stock not balanced", "More children than doses", "Line list differs", "No issue"];
       statusMap("dqMap", s => { const sts = q.filter(r => r.code === s.code).map(r => r.st); return order.find(o => sts.includes(o)) || "No issue"; },
         { "Stock not balanced": "--critical", "More children than doses": "--s2", "Line list differs": "--warning", "No issue": "--good" }, (s, st) => `<b>${esc(s.name)}</b><br>${st}`);
+      syncBars("dqSync", "Frontline workers", "Sync rate"); syncBars("dqDown", "Vaccinators downsynced", "Downsync rate");
       table("dqMiss", [{ h: "Date", l: 1, f: r => dlabel(r.d) }, { h: "Cluster", l: 1, f: r => esc(r.s.cluster) }, { h: "Site", l: 1, f: r => esc(r.s.name) }, { h: "Vaccine", l: 1, k: "p" }],
         rep.filter(r => !r.ok).sort((a, b) => a.d.localeCompare(b.d) || a.s.cluster.localeCompare(b.s.cluster)));
       table("dqTbl", [{ h: "Date", l: 1, f: r => dlabel(r.d) }, { h: "Cluster", l: 1, f: r => esc(S(r.code).cluster) }, { h: "Site", l: 1, f: r => esc(S(r.code).name) }, { h: "Vaccine", l: 1, k: "p" },

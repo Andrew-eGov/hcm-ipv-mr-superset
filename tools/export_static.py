@@ -69,6 +69,8 @@ def main():
                        group="1, 2, 3")
     out["listed"] = q("SELECT site_code AS code, CAST(event_date AS date) AS d, sum(mr) AS mr, sum(ipv) AS ipv, "
                       "max(source_campaign_day) AS child_day FROM " + DS.CHILD + " GROUP BY 1, 2")
+    out["sync"] = ds(DS.ds_sync, "region, district, user_group AS g, count(*) AS total, sum(synced) AS synced",
+                     group="1, 2, 3")
     out["districts"] = q("SELECT boundary_code AS code, region, district FROM microplan.public.dim_district ORDER BY 2, 3")
     out["geo_districts"] = geo("data/districts.geojson", ("boundary_code", "district", "region"))
     out["geo_regions"] = geo("data/regions.geojson", ("region",))

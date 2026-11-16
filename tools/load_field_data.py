@@ -35,7 +35,7 @@ ES_HOST, ES_PORT = os.environ.get("ES_HOST", "localhost"), int(os.environ.get("E
 PG = dict(host="localhost", port=5433, user="hcm", password="hcm", dbname="microplan")
 CAMPAIGN_START = dt.date(2026, 11, 9)
 REGION, DISTRICT = "Zambezi", "Katima Mulilo"   # every cluster in the workbook sits in this microplan district
-CHILD_IDX, SITE_IDX = "field-child-v1", "field-site-day-v1"
+CHILD_IDX, SITE_IDX, SYNC_IDX = "field-child-v1", "field-site-day-v1", "field-user-sync-v1"
 # Synthetic HCM indexes from tools/legacy/generate_mock.py - removed so nothing synthetic remains
 LEGACY_IDX = ["project-task-index-v1", "individual-index-v1", "household-index-v1", "stock-index-v1",
               "service-task-v1", "pgr-services-index-v1", "downsync-index-v1", "aefi-index-v1"]
@@ -49,6 +49,29 @@ SITE_FIELDS = dict(vaccine=KW, event_date={"type": "date"}, campaign_day=INT, so
 CHILD_FIELDS = dict(child_id=KW, event_date={"type": "date"}, campaign_day=INT, source_campaign_day=INT,
                     site_code=KW, site_name=KW, cluster=KW, age_group=KW, ipv=INT, mr=INT, ipv_eligible=INT,
                     vaccine_status=KW, gender=KW, gender_synthetic=INT)
+
+
+SYNC_FIELDS = dict(user_id=KW, role_group=KW, boundary_code=KW, synced=INT, downsynced=INT,
+                   last_sync_date={"type": "date"}, synthetic=INT)
+
+
+def unit(key):
+    return int(hashlib.sha256(key.encode()).hexdigest()[:8], 16) / 0xFFFFFFFF
+
+
+def synthetic_sync(cur):
+    """The field database has no app sync data. Until HCM is connected, every frontline user in the
+    microplan gets a stable synthetic sync status (about 93% synced, about 86% of vaccinators
+    downsynced), flagged synthetic = 1, so the Data Quality sync charts keep working."""
+    cur.execute("SELECT user_id, role_group, boundary_code FROM dim_user WHERE role_group IN ('VACCINATOR', 'REGISTRAR')")
+    docs = []
+    for uid, role, bcode in cur.fetchall():
+        synced = int(unit(f"sync-20261109-{uid}") < 0.93)
+        down = int(role == "VACCINATOR" and unit(f"downsync-20261109-{uid}") < 0.86)
+        last = f"2026-11-{10 + int(unit(f'day-{uid}') * 2):02d}" if synced else None
+        docs.append((uid, dict(user_id=uid, role_group=role, boundary_code=bcode, synced=synced, downsynced=down,
+                               last_sync_date=last, synthetic=1)))
+    return docs
 
 
 def synthetic_gender(child_id):
@@ -156,10 +179,13 @@ def main():
     recreate(CHILD_IDX, CHILD_FIELDS, children)
 
     sites = load_sites()
+    conn = psycopg2.connect(**PG)
+    sync = synthetic_sync(conn.cursor())
+    recreate(SYNC_IDX, SYNC_FIELDS, sync)
     unknown = {d["site_code"] for d in site_docs.values()} - {s["site_code"] for s in sites}
     if unknown:
         raise SystemExit(f"Sites missing from data/sites.csv: {sorted(unknown)}")
-    print(f"{SITE_IDX}={len(site_docs)} {CHILD_IDX}={len(children)} dim_site={len(sites)}")
+    print(f"{SITE_IDX}={len(site_docs)} {CHILD_IDX}={len(children)} {SYNC_IDX}={len(sync)} (synthetic) dim_site={len(sites)}")
 
 
 if __name__ == "__main__":
