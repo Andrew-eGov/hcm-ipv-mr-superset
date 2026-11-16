@@ -343,7 +343,7 @@ R.Overview = () => {
     prods().map(vkpis).join(""),
     `<div class="grid">${prods().map(p => card("c6", `ovPie${p}`, `${p}: vaccinated vs remaining to target`)).join("")}</div>`,
     `<div class="grid">${card("c6", "ovReg", "Coverage by region (MR and IPV)")}${card("c6", "ovDist", "Coverage by district (MR and IPV)")}</div>`,
-    `<div class="grid">${prods().map(p => card("c6", `ovMap${p}`, `Map: ${p} coverage % by district`, "Namibia only; districts without uploads stay blank", "map")).join("")}</div>`,
+    `<div class="grid">${prods().map(p => card("c6", `ovMap${p}`, `Map: ${p} coverage % by district`, "", "map")).join("")}</div>`,
     `<div class="grid">${card("c12", "ovFac", "Map: health facilities by type", "", "map")}</div>`,
     `<div class="grid">${prods().map(p => card("c6", `ovGen${p}`, `Gender distribution (${p})`, "<b>Synthetic</b>: the field database has no gender yet, so each child is given a stable synthetic gender (≈50.7% male)")).join("")}</div>`,
     () => {
@@ -357,7 +357,7 @@ R.Overview = () => {
   ];
 };
 R.Coverage = () => [
-  `<div class="grid">${prods().map(p => card("c6", `cvMap${p}`, `Map: ${p} coverage % by region`, "Namibia only; regions without uploads stay blank", "map")).join("")}</div>`,
+  `<div class="grid">${prods().map(p => card("c6", `cvMap${p}`, `Map: ${p} coverage % by region`, "", "map")).join("")}</div>`,
   `<div class="grid">${card("c6", "cvReg", "Coverage by region (MR and IPV)")}${card("c6", "cvDist", "Coverage by district (MR and IPV)")}</div>`,
   `<div class="grid">${prods().map(p => card("c6", `cvAge${p}`, `${p}: children vaccinated by age group`, "Age groups as recorded in the field database")).join("")}</div>`,
   `<div class="grid">${card("c6", "cvClu", "Coverage by cluster (MR and IPV)")}${card("c6", "cvSite", "Coverage by site (MR and IPV)")}</div>`,
