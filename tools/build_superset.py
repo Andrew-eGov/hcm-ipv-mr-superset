@@ -451,7 +451,9 @@ def define(days_remaining):
           adhoc_filters=[TIME_F()], row_limit=10000, color_scheme="supersetColors")
     for v in ("MR", "IPV"):
         point_map(T, f"9{v}", 9, f"Inventory map: sites by cumulative stock against need ({v})", "field_sites",
-                  f"{v.lower()}_stock_status", STATUS_COLOURS, ("site_name", "mr_stock_status", "ipv_stock_status"),
+                  f"{v.lower()}_stock_status", STATUS_COLOURS,
+                  ("Site", f"{v} status", f"{v} vials received (incl. additional)", f"{v} vials left over (returned unopened)",
+                   f"{v} vials used (issued net)", f"{v} vials needed for target", f"{v} vials short (-) or spare (+)"),
                   legend_title=f"{v}: vials issued (net) vs needed",
                   note="Vials needed = target ÷ doses per vial × 1.05, summed over all campaign days with data.")
     table(T, 10, 12, "Inventory: stock by site and campaign day", "field_site_day",

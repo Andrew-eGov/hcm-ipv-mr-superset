@@ -445,7 +445,12 @@ R.Inventory = () => {
         series: [{ type: "sankey", orient: "horizontal", left: 8, right: 160, top: 10, bottom: 10, nodeGap: 4, data: nodes, links: L2, emphasis: { focus: "adjacency" },
           label: { color: css("--ink-2"), fontSize: 10 }, lineStyle: { color: "gradient", opacity: .35 } }] });
       prods().forEach(p => statusMap(`ivMap${p}`, s => { const rs = D.site_day.filter(r => r.code === s.code && r.p === p && dateOk(r.d)); return !rs.length ? "No stock data" : sum(rs, net) < sum(rs, need) ? "Not enough vials for target" : "Enough vials for target"; },
-        { "Not enough vials for target": "--critical", "Enough vials for target": "--good", "No stock data": "--muted" }, (s, st) => `<b>${esc(s.name)}</b><br>${p}: ${st}`));
+        { "Not enough vials for target": "--critical", "Enough vials for target": "--good", "No stock data": "--muted" }, (s, st) => {
+          const rs = D.site_day.filter(r => r.code === s.code && r.p === p && dateOk(r.d)), iss = sum(rs, net), nd = sum(rs, need), gap = iss - nd;
+          return `<b>${esc(s.name)}</b><br>${p}: ${st}` + (rs.length ? `<br>Vials received (incl. additional): <b>${fmt(sum(rs, r => (r.rec || 0) + (r.add || 0)))}</b>` +
+            `<br>Vials left over (returned unopened): <b>${fmt(sum(rs, r => r.ret))}</b><br>Vials used (issued net): <b>${fmt(iss)}</b>` +
+            `<br>Vials needed for target: <b>${fmt1(nd)}</b><br>Vials ${gap < 0 ? "short" : "spare"}: <b>${fmt1(Math.abs(gap))}</b>` : "");
+        }));
       table("ivTbl", [{ h: "Date", l: 1, f: r => dlabel(r.d) }, { h: "Cluster", l: 1, f: r => esc(S(r.code).cluster) }, { h: "Site", l: 1, f: r => esc(S(r.code).name) }, { h: "Vaccine", l: 1, k: "p" },
         { h: "Vials received", f: r => fmt(r.rec) }, { h: "Additional vials received", f: r => fmt(r.add) }, { h: "Vials opened", f: r => fmt(r.opened) },
         { h: "Vials returned unopened", f: r => fmt(r.ret) }, { h: "Vials issued (net)", f: r => fmt(net(r)) }, { h: "Children vaccinated", f: r => fmt(r.vac) },

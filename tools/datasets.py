@@ -119,13 +119,27 @@ def ds_sites():
     """Vaccination sites with coordinates, facility type, coverage and cumulative stock against need per vaccine."""
     return f"""
 WITH n AS (SELECT site_code,
-       sum(CASE WHEN product = 'MR' THEN vials_issued_net END) - sum(CASE WHEN product = 'MR' THEN vials_needed END) AS mr_gap,
-       sum(CASE WHEN product = 'IPV' THEN vials_issued_net END) - sum(CASE WHEN product = 'IPV' THEN vials_needed END) AS ipv_gap
+       sum(CASE WHEN product = 'MR' THEN vials_received + additional_vials_received END) AS mr_received,
+       sum(CASE WHEN product = 'MR' THEN vials_returned_unopened END) AS mr_returned,
+       sum(CASE WHEN product = 'MR' THEN vials_issued_net END) AS mr_issued,
+       sum(CASE WHEN product = 'MR' THEN vials_needed END) AS mr_needed,
+       sum(CASE WHEN product = 'IPV' THEN vials_received + additional_vials_received END) AS ipv_received,
+       sum(CASE WHEN product = 'IPV' THEN vials_returned_unopened END) AS ipv_returned,
+       sum(CASE WHEN product = 'IPV' THEN vials_issued_net END) AS ipv_issued,
+       sum(CASE WHEN product = 'IPV' THEN vials_needed END) AS ipv_needed
        FROM ({site_day_base()}) b GROUP BY 1)
-SELECT {DIMS}, s.latitude, s.longitude, s.coord_source, s.team_note,
+SELECT {DIMS}, s.site_name AS "Site", s.latitude, s.longitude, s.coord_source, s.team_note,
        round(c.mr_coverage_pct, 1) AS mr_coverage_pct, round(c.ipv_coverage_pct, 1) AS ipv_coverage_pct,
-       CASE WHEN n.mr_gap IS NULL THEN 'No stock data' WHEN n.mr_gap < 0 THEN 'Not enough vials for target' ELSE 'Enough vials for target' END AS mr_stock_status,
-       CASE WHEN n.ipv_gap IS NULL THEN 'No stock data' WHEN n.ipv_gap < 0 THEN 'Not enough vials for target' ELSE 'Enough vials for target' END AS ipv_stock_status
+       CASE WHEN n.mr_issued IS NULL THEN 'No stock data' WHEN n.mr_issued < n.mr_needed THEN 'Not enough vials for target' ELSE 'Enough vials for target' END AS mr_stock_status,
+       CASE WHEN n.mr_issued IS NULL THEN 'No stock data' WHEN n.mr_issued < n.mr_needed THEN 'Not enough vials for target' ELSE 'Enough vials for target' END AS "MR status",
+       n.mr_received AS "MR vials received (incl. additional)", n.mr_returned AS "MR vials left over (returned unopened)",
+       n.mr_issued AS "MR vials used (issued net)", round(n.mr_needed, 1) AS "MR vials needed for target",
+       round(n.mr_issued - n.mr_needed, 1) AS "MR vials short (-) or spare (+)",
+       CASE WHEN n.ipv_issued IS NULL THEN 'No stock data' WHEN n.ipv_issued < n.ipv_needed THEN 'Not enough vials for target' ELSE 'Enough vials for target' END AS ipv_stock_status,
+       CASE WHEN n.ipv_issued IS NULL THEN 'No stock data' WHEN n.ipv_issued < n.ipv_needed THEN 'Not enough vials for target' ELSE 'Enough vials for target' END AS "IPV status",
+       n.ipv_received AS "IPV vials received (incl. additional)", n.ipv_returned AS "IPV vials left over (returned unopened)",
+       n.ipv_issued AS "IPV vials used (issued net)", round(n.ipv_needed, 1) AS "IPV vials needed for target",
+       round(n.ipv_issued - n.ipv_needed, 1) AS "IPV vials short (-) or spare (+)"
 FROM {MP}.dim_site s
 LEFT JOIN ({cov_by('site_code')}) c ON c.site_code = s.site_code
 LEFT JOIN n ON n.site_code = s.site_code"""
