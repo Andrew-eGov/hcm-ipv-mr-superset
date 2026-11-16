@@ -23,7 +23,7 @@ Superset 6.1 dashboard for the DIGIT HCM **Namibia IPV + MR integrated campaign*
 ## Traps already hit
 
 - **Join on `Site_Code`, never on site name.** The same site has different names across sheets ("Bukalo Health Centre" vs "Bukalo HC (+ team 4)").
-- **Campaign_Day in the workbook is inconsistent** (Children: 10 Nov = day 1; Agg/Stock: day 2). Day is computed from the date; the source value is kept only for the Data Quality check.
+- **Campaign_Day in the workbook is inconsistent** (Children: 10 Nov = day 1; Agg/Stock: day 2). Day is computed from the date; the source value is stored as source_campaign_day but no chart uses it now.
 - **Stock sheets end with a TOTAL row.** The loader drops rows without a Site_Code.
 - **deck.gl multi-layer maps can't colour points by a column** and show no legend. `point_map()` in `build_superset.py` makes one layer per category with a fixed colour and a markdown legend beside the map (emoji dots, because dashboard markdown strips inline styles).
 - **Namibia-only maps** use a transparent 1×1 PNG as the tile URL (`TILE` in `build_superset.py`). A wrong base64 PNG paints the whole map purple.
