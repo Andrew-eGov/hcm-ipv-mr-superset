@@ -42,8 +42,6 @@ DOT = {id(C_ORANGE): "🟠", id(C_BLUE): "🔵", id(C_GREEN): "🟢", id(C_PURPL
        id(C_WHITE): "⚪"}
 FACILITY_TYPES = {"Health centre": C_ORANGE, "Clinic": C_BLUE, "Outreach point": C_GREEN, "School": C_PURPLE}
 STATUS_COLOURS = {"Below vials needed": C_RED, "Enough vials issued": C_GREEN, "No stock data": C_WHITE}
-DQ_COLOURS = {"Stock not balanced": C_RED, "More children than doses": C_ORANGE, "Line list differs": C_YELLOW,
-              "No issue": C_GREEN}
 
 
 def legend_html(title, colours, note=""):
@@ -89,7 +87,7 @@ def teardown():
     for name in DATASETS:
         for d in find("dataset", "table_name", name):
             api("DELETE", f"/api/v1/dataset/{d['id']}")
-    for prefix in ("hcm_",):   # datasets of the earlier synthetic-data build
+    for prefix in ("hcm_", "field_"):   # datasets of earlier builds (incl. ones since removed)
         for d in find("dataset", "table_name", prefix, "sw"):
             api("DELETE", f"/api/v1/dataset/{d['id']}")
 
@@ -454,36 +452,13 @@ def define(days_remaining):
         "Vaccinators downsynced at least once", ",d", g, note="synthetic until HCM is connected")
     big(T, 0, 4, "DQ: downsync rate", "field_sync", M("AVG(CAST(synced AS double))", "Rate"), "Downsync rate", ".1%", g,
         note="synthetic until HCM is connected")
-    big(T, 1, 2, "DQ: site-day reports received", "field_reporting", M(PCT("SUM(reported)", "SUM(expected)"), "Received"),
-        "Site-day reports received (of expected)", ".0%", [TIME_F()])
-    for name, col, label in (("stock not balanced", "stock_unbalanced", "Stock entries not balanced (received ≠ opened + returned)"),
-                             ("line list differs", "list_vs_aggregate_mismatch", "Child line list ≠ aggregate count"),
-                             ("above target", "above_target", "Site-days with more children than target"),
-                             ("children above doses", "more_children_than_doses", "More children than doses in opened vials")):
-        big(T, 1, 2, f"DQ: {name}", "field_dq", M(f"SUM({col})", label), label, ",d", [TIME_F()])
-    big(T, 1, 2, "DQ: sites with approximate location", "field_dq",
-        M("COUNT(DISTINCT CASE WHEN approximate_location = 1 THEN site_code END)", "Sites"),
-        "Sites with approximate location (no GPS in source)", ",d")
-    bar(T, 2, 6, "DQ: reporting completeness by cluster", "field_reporting", "cluster",
-        [M(PCT("SUM(reported)", "SUM(expected)"), "Reports received")], ["product"], fmt=".0%", y_max=1, filters=[TIME_F()])
-    bar(T, 2, 6, "DQ: issues by check and cluster", "field_dq", "cluster",
-        [M("SUM(stock_unbalanced)", "Stock not balanced"), M("SUM(more_children_than_doses)", "More children than doses"),
-         M("SUM(above_target)", "Above target"), M("SUM(list_vs_aggregate_mismatch)", "Line list differs")],
-        stack=True, filters=[TIME_F()])
-    point_map(T, 3, 9, "DQ map: site-days by data-quality status", "field_dq", "dq_status", DQ_COLOURS,
-              ("site_name", "event_date", "product", "dq_status"), legend_title="Data-quality status",
-              note="One point per site, day and vaccine; the most serious issue is shown. Points overlap at the same site.")
-    table(T, "3b", 12, "DQ: site-day reports missing", "field_reporting", ["event_date", "cluster", "site_name", "product"],
-          [M("SUM(expected) - SUM(reported)", "Reports missing")], filters=[FSQL("reported = 0"), TIME_F()],
-          formats={"event_date": {"d3TimeFormat": "%d %b"}}, height=60)
-    table(T, 4, 12, "DQ: site-days with issues", "field_dq", ["event_date", "cluster", "site_name", "product", "dq_status"],
-          [M("SUM(vaccinated)", "Children vaccinated (aggregate)"), M("SUM(children_listed)", "Children in line list"),
-           M("SUM(doses_opened)", "Doses in opened vials"), M("SUM(target)", "Target"),
-           M("SUM(stock_unbalanced_vials)", "Vials not accounted for")],
-          filters=[FSQL("dq_status <> 'No issue' OR above_target = 1"), TIME_F()],
-          formats={"event_date": {"d3TimeFormat": "%d %b"}},
-          cond=[{"colorScheme": "#EFA1AA", "column": "Vials not accounted for", "operator": "!=", "targetValue": 0}],
-          order=M("SUM(stock_unbalanced_vials)", "Vials not accounted for"), height=70)
+    fl = [F("user_group", "IN", ["Frontline workers"])]
+    big(T, 1, 4, "DQ: frontline workers total", "field_sync", M("COUNT(*)", "Workers"), "Frontline workers: total",
+        ",d", fl, note="vaccinators and registrars - synthetic")
+    big(T, 1, 4, "DQ: frontline workers synced", "field_sync", M("SUM(synced)", "Synced"),
+        "Frontline workers synced at least once", ",d", fl, note="synthetic until HCM is connected")
+    big(T, 1, 4, "DQ: frontline sync rate", "field_sync", M("AVG(CAST(synced AS double))", "Rate"), "Frontline sync rate",
+        ".1%", fl, note="synthetic until HCM is connected")
     bar(T, "4b", 6, "DQ: frontline sync rate by district (synthetic)", "field_sync", "district",
         [M("AVG(CAST(synced AS double))", "Sync rate")], fmt=".0%", filters=[F("user_group", "IN", ["Frontline workers"])],
         sort_by_metric=True, x_axis_sort_asc=True, y_max=1)
@@ -492,10 +467,8 @@ def define(days_remaining):
         filters=[F("user_group", "IN", ["Vaccinators downsynced"])], x_axis_sort_asc=True, y_max=1)
     markdown(T, 5, 12, 14, BANNER.format(text=(
         "Sync figures are synthetic: the field database has no app sync records, so each frontline user in the "
-        "microplan gets a stable synthetic status until HCM is connected. "
-        "Campaign day is taken from the date (9 Nov = day 1). The source workbook numbers days differently by sheet: "
-        "Children calls 10 Nov day 1, while Agg and Stock call it day 2. Sites with approximate location have no "
-        "coordinates in the source and could not be found in OpenStreetMap; they are placed at their cluster centre.")))
+        "microplan (vaccinators and registrars) gets a stable synthetic status until HCM is connected. Shown only "
+        "for districts that uploaded field data.")))
 
 
 TABS = ["Overview", "Coverage", "Inventory", "Data Quality"]

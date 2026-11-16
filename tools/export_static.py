@@ -67,8 +67,6 @@ def main():
                          group="1, 2, 3, 4")
     out["status"] = ds(DS.ds_child_status, "site_code AS code, event_date AS d, vaccine_status AS s, sum(children) AS n",
                        group="1, 2, 3")
-    out["listed"] = q("SELECT site_code AS code, CAST(event_date AS date) AS d, sum(mr) AS mr, sum(ipv) AS ipv, "
-                      "max(source_campaign_day) AS child_day FROM " + DS.CHILD + " GROUP BY 1, 2")
     out["sync"] = ds(DS.ds_sync, "region, district, user_group AS g, count(*) AS total, sum(synced) AS synced",
                      group="1, 2, 3")
     out["districts"] = q("SELECT boundary_code AS code, region, district FROM microplan.public.dim_district ORDER BY 2, 3")

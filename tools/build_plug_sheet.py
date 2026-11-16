@@ -37,19 +37,21 @@ INDEXES = [
     ("I2", "Site-day report", "One document per site x date x vaccine: target, children vaccinated by age group, vials received / additional / opened / returned unopened",
      "field-site-day-v1",
      "Today: Agg_MR + Stock_MR and Agg_IPV + Stock_IPV of the field database. In HCM: stock index (vials) + task aggregates (children) + the microplan daily site target. Usually 'Needs transform' (a daily aggregation job)."),
+    ("I3", "App sync per user", "One document per frontline user (vaccinator or registrar): synced at least once, downsynced at least once",
+     "field-user-sync-v1",
+     "Today: SYNTHETIC (tools/load_field_data.py). In HCM: derive from the task / individual indexes (createdBy) for sync and the downsync index for downsync."),
 ]
 
 # id, index, field path, ES type, format / allowed values, example, used by, notes
 FIELDS = [
     ("F01", "I1", "child_id", "keyword", "Unique child id", "BKL-000001", "K32", "Only used to count children; never shown or exported."),
-    ("F02", "I1", "event_date", "date", "Date the child was vaccinated (yyyy-MM-dd, local time)", "2026-11-10", "K13 K30 K31 K32", ""),
-    ("F03", "I1", "site_code", "keyword", "Site code, as in data/sites.csv", "S01", "K13 K30 K31 K32", "Join on site code, never on site name (names vary between sheets)."),
-    ("F04", "I1", "age_group", "keyword", "Age group as recorded - see sheet 4", "12-59 months", "K31", ""),
-    ("F05", "I1", "mr", "integer", "1 if MR given, else 0", "1", "K13 K30 K32", ""),
-    ("F06", "I1", "ipv", "integer", "1 if IPV given, else 0", "1", "K13 K30 K32", ""),
-    ("F07", "I1", "vaccine_status", "keyword", "Which vaccines the child received - see sheet 4", "IPV + MR", "K31", ""),
+    ("F02", "I1", "event_date", "date", "Date the child was vaccinated (yyyy-MM-dd, local time)", "2026-11-10", "K13 K32", ""),
+    ("F03", "I1", "site_code", "keyword", "Site code, as in data/sites.csv", "S01", "K13 K32", "Join on site code, never on site name (names vary between sheets)."),
+    ("F04", "I1", "age_group", "keyword", "Age group as recorded - see sheet 4", "12-59 months", "K32", ""),
+    ("F05", "I1", "mr", "integer", "1 if MR given, else 0", "1", "K13 K32", ""),
+    ("F06", "I1", "ipv", "integer", "1 if IPV given, else 0", "1", "K13 K32", ""),
+    ("F07", "I1", "vaccine_status", "keyword", "Which vaccines the child received - see sheet 4", "IPV + MR", "K32", ""),
     ("F08", "I1", "gender", "keyword", "MALE / FEMALE (empty if not recorded)", "FEMALE", "K13", "Not in the field database yet: the loader fills a synthetic gender (gender_synthetic = 1) and the pies are labelled synthetic."),
-    ("F09", "I1", "source_campaign_day", "integer", "Campaign day as written by the source", "1", "K33", "Only used to flag day-number mismatches."),
     ("F20", "I2", "vaccine", "keyword", "MR or IPV - see sheet 4", "MR", "All I2 KPIs", "One document per vaccine."),
     ("F21", "I2", "event_date", "date", "Report date (yyyy-MM-dd)", "2026-11-10", "All I2 KPIs", "Campaign day is computed from this date (9 Nov = day 1)."),
     ("F22", "I2", "site_code", "keyword", "Site code, as in data/sites.csv", "S01", "All I2 KPIs", ""),
@@ -58,12 +60,15 @@ FIELDS = [
     ("F25", "I2", "vaccinated_14w_11m", "integer", "IPV: children vaccinated 14 weeks-11 months", "17", "K12", "IPV only."),
     ("F26", "I2", "vaccinated_12_59m", "integer", "Children vaccinated 12-59 months", "79", "K12", "Both vaccines."),
     ("F27", "I2", "vaccinated_5_10y", "integer", "MR: children vaccinated 5-10 years", "109", "K12", "MR only."),
-    ("F28", "I2", "total_vaccinated", "integer", "Children vaccinated (sum of the age groups)", "202", "K01 K02 K03 K05 K10 K11 K14 K21 K30 K31", ""),
-    ("F29", "I2", "vials_received", "integer", "Vials issued to the site at the start of the day", "59", "K15 K16 K17 K20 K24 K34", ""),
-    ("F30", "I2", "additional_vials_received", "integer", "Top-up vials issued during the day", "0", "K16 K17 K20 K24 K34", ""),
-    ("F31", "I2", "vials_opened", "integer", "Vials used for vaccination that day", "41", "K05 K06 K18 K21 K24 K34", ""),
-    ("F32", "I2", "vials_returned_unopened", "integer", "Vials sent back to the store at day end", "18", "K17 K18 K19 K20 K24 K34", ""),
-    ("F33", "I2", "source_campaign_day", "integer", "Campaign day as written by the source", "2", "K33", "Only used to flag day-number mismatches."),
+    ("F28", "I2", "total_vaccinated", "integer", "Children vaccinated (sum of the age groups)", "202", "K01 K02 K03 K05 K10 K11 K14 K21", ""),
+    ("F29", "I2", "vials_received", "integer", "Vials issued to the site at the start of the day", "59", "K15 K16 K17 K20 K24", ""),
+    ("F30", "I2", "additional_vials_received", "integer", "Top-up vials issued during the day", "0", "K16 K17 K20 K24", ""),
+    ("F31", "I2", "vials_opened", "integer", "Vials used for vaccination that day", "41", "K05 K06 K18 K21 K24", ""),
+    ("F32", "I2", "vials_returned_unopened", "integer", "Vials sent back to the store at day end", "18", "K17 K18 K19 K20 K24", ""),
+    ("F40", "I3", "user_id", "keyword", "User id, as in the microplan user list (dim_user)", "NAM-U-00431", "K40 K41", "Must match dim_user ids."),
+    ("F41", "I3", "role_group", "keyword", "VACCINATOR or REGISTRAR", "VACCINATOR", "K40 K41", ""),
+    ("F42", "I3", "synced", "integer", "1 if the user synced at least once", "1", "K40", ""),
+    ("F43", "I3", "downsynced", "integer", "1 if the vaccinator downsynced at least once", "1", "K41", ""),
 ]
 
 CODES = [
@@ -105,12 +110,9 @@ KPIS = [
     ("K21", "Inventory", "Wastage % by district and site (allowed 5%)", "As K05, grouped, with the 5% allowed line", "see K05", "see K05", "I2", "F20 F22 F28 F31", "dim_product", "field_site_day"),
     ("K22", "Inventory", "Cumulative vials issued (net) vs vials needed, by site", "Vials needed = target ÷ doses per vial × (1 + 5%); sites below need highlighted", "K17", "target ÷ doses per vial × 1.05", "I2", "F20 F22 F23 F29 F30 F32", "dim_product", "field_site_day, field_sites"),
     ("K24", "Inventory", "Stock flow (Sankey)", "National > regional > district store > site > vials opened / returned unopened (store layers = sums of sites)", "vials", "-", "I2", "F20 F22 F29 F30 F31 F32", "dim_site", "field_stock_flow"),
-    ("K30", "Data Quality", "Child line list vs aggregate", "Children in the line list ≠ total_vaccinated for the same site, date and vaccine", "line-list count", "total_vaccinated", "I1 I2", "F02 F03 F05 F06 F21 F22 F28", "-", "field_dq"),
-    ("K31", "Data Quality", "Children above target / above doses", "Site-days with total_vaccinated > target, or > doses in opened vials", "total_vaccinated", "target, doses", "I2", "F22 F23 F28 F31", "dim_product", "field_dq"),
+    ("K40", "Data Quality", "Frontline workers synced / sync rate", "Vaccinators and registrars who synced at least once ÷ all of them, by district", "synced", "users", "I3", "F40 F41 F42", "dim_user", "field_sync"),
+    ("K41", "Data Quality", "Vaccinators downsynced / downsync rate", "Vaccinators who downsynced at least once ÷ vaccinators, by district", "downsynced", "vaccinators", "I3", "F40 F41 F43", "dim_user", "field_sync"),
     ("K32", "Coverage", "Children by vaccines received", "Children per vaccine_status", "children", "-", "I1", "F01 F02 F03 F07", "dim_site", "field_child_status"),
-    ("K33", "Data Quality", "Campaign-day label mismatch", "Source campaign day ≠ day computed from the date", "-", "-", "I1 I2", "F09 F21 F33", "-", "field_dq"),
-    ("K34", "Data Quality", "Stock not balanced", "Vials received + additional ≠ opened + returned unopened", "F29 + F30 - F31 - F32", "-", "I2", "F22 F29 F30 F31 F32", "-", "field_dq"),
-    ("K35", "Data Quality", "Reporting completeness", "Site-day reports received ÷ sites × vaccines × dates with data", "reports", "sites × vaccines × dates", "I2", "F20 F21 F22", "dim_site", "field_reporting"),
 ]
 
 CONNECTION = [
@@ -122,7 +124,7 @@ CONNECTION = [
     ("Authentication", "hcm.properties → elasticsearch.security", "(none)", "PASSWORD for basic auth; leave empty if open inside the network."),
     ("ES user name", "hcm.properties → elasticsearch.auth.user", "(none)", "Read-only user is enough."),
     ("ES password", "hcm.properties → elasticsearch.auth.password", "(none)", "DO NOT type the password in this sheet. Put it only in hcm.properties on the server (never commit it)."),
-    ("Index names", "tools/datasets.py → CHILD, SITE_DAY", "field-child-v1, field-site-day-v1", "Real index or alias names (sheet 2)."),
+    ("Index names", "tools/datasets.py → CHILD, SITE_DAY, SYNC", "field-child-v1, field-site-day-v1, field-user-sync-v1", "Real index or alias names (sheet 2)."),
     ("Document root object", "tools/datasets.py", "none (flat fields)", "If real docs nest fields (e.g. under 'Data'), write the root here."),
     ("Campaign / project filter", "tools/datasets.py (add a WHERE clause)", "(none - one campaign)", "If the indexes hold several campaigns, which field + value identifies NAM-09-01-IPV-MR_NID?"),
     ("Campaign start date", "tools/datasets.py → CAMPAIGN_START", "2026-11-09", "Day 1. Confirm."),
@@ -151,6 +153,7 @@ MICROPLAN = [
     ("dim_district_polygon / dim_region_polygon", "data/districts.geojson, data/regions.geojson", "Shapes for the coverage maps", "District shapes are approximate - replace with official ones if available."),
     ("dim_product", "tools/load_microplan.py (PRODUCTS)", "Doses per vial, eligible ages, allowed wastage", "MR 5 and IPV 10 doses per vial, inferred from the field data - confirm."),
     ("dim_campaign_day", "tools/load_microplan.py", "Campaign days 1-11", ""),
+    ("dim_user", "Microplan User List (roles + boundary only - no names or phones)", "User id, role, district", "Denominator for the sync KPIs. Real HCM user ids are needed."),
 ]
 
 
@@ -214,7 +217,7 @@ def main():
     rows = [
         ("How to use", ""),
         ("1", "Sheet 1 Connection - where the ES cluster is (no passwords here)."),
-        ("2", "Sheet 2 Indexes - where each of the 2 data sources lives in HCM (index name, or the job that builds it)."),
+        ("2", "Sheet 2 Indexes - where each of the 3 data sources lives in HCM (index name, or the job that builds it)."),
         ("3", "Sheet 3 Fields - for each field the dashboard reads, the real HCM field path (or what transform is needed)."),
         ("4", "Sheet 4 Value codes - the real HCM value for each code the dashboard filters on (e.g. how HCM writes the vaccine names)."),
         ("5", "Sheet 5 KPIs - read-only catalogue of every KPI, its formula and fields. 'Fields not yet mapped' updates automatically from sheet 3."),
@@ -227,7 +230,7 @@ def main():
         ("Status", "Pick from the dropdown: Not started · Mapped - same name · Mapped - different name · Needs transform · Not available in HCM."),
         ("", ""),
         ("Progress", ""),
-        ("Indexes mapped", "=COUNTIF('2 Indexes'!$H$6:$H$7,\"Mapped*\")&\" of \"&COUNTA('2 Indexes'!$A$6:$A$7)"),
+        ("Indexes mapped", "=COUNTIF('2 Indexes'!$H$6:$H$8,\"Mapped*\")&\" of \"&COUNTA('2 Indexes'!$A$6:$A$8)"),
         ("Fields mapped", "=COUNTIF('3 Fields'!$K$6:$K$100,\"Mapped*\")&\" of \"&COUNTA('3 Fields'!$A$6:$A$100)"),
         ("Fields needing a transform", "=COUNTIF('3 Fields'!$K$6:$K$100,\"Needs transform\")"),
         ("Fields not available in HCM", "=COUNTIF('3 Fields'!$K$6:$K$100,\"Not available in HCM\")"),
@@ -270,7 +273,7 @@ def main():
 
     # ---- 2 Indexes
     ws = wb.create_sheet("2 Indexes")
-    title(ws, "2 · Indexes", "The 2 Elasticsearch indexes the dashboard reads. Fill the real HCM index / alias (or the job that builds it) and status.")
+    title(ws, "2 · Indexes", "The 3 Elasticsearch indexes the dashboard reads. Fill the real HCM index / alias (or the job that builds it) and status.")
     hdr = ["Id", "Data source", "What one document is", "Dashboard reads today", "Real HCM index / alias", "Approx. doc count", "Check query (Trino)", "Status", "Notes"]
     for c, h in enumerate(hdr, 1):
         ws.cell(row=4, column=c, value=h)

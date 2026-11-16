@@ -452,12 +452,12 @@ R.Inventory = () => {
   ];
 };
 function syncRows(g) { return D.sync.filter(r => r.g === g && (!F.region || r.region === F.region) && (!F.district || r.district === F.district)); }
-function syncStrip(title, g) {
+function syncStrip(title, g, okLabel, rateLabel, sub = "Synthetic until HCM is connected") {
   const rs = syncRows(g), tot = sum(rs, r => r.total), ok = sum(rs, r => r.synced);
-  return `<div class="strip"><div class="lbl"><span>⟲</span><div>${title}<small>Synthetic until HCM is connected</small></div></div>
+  return `<div class="strip"><div class="lbl"><span>⟲</span><div>${title}<small>${sub}</small></div></div>
   <div class="m k"><div class="t">Total</div><div class="v">${fmt(tot)}</div></div>
-  <div class="m k"><div class="t">Downsynced at least once</div><div class="v">${fmt(ok)}</div></div>
-  <div class="m k"><div class="t">Downsync rate</div><div class="v">${pct(ok / tot, 1)}</div>${status(ok / tot, .95, .85)}</div></div>`;
+  <div class="m k"><div class="t">${okLabel}</div><div class="v">${fmt(ok)}</div></div>
+  <div class="m k"><div class="t">${rateLabel}</div><div class="v">${pct(ok / tot, 1)}</div>${status(ok / tot, .95, .85)}</div></div>`;
 }
 function syncBars(id, g, label) {
   const rs = syncRows(g), ds = rs.map(r => r.district).sort((a, b) => { const v = d => { const x = rs.find(r => r.district === d); return x.synced / x.total; }; return v(a) - v(b); });
@@ -465,56 +465,13 @@ function syncBars(id, g, label) {
     series: [barS(label, ds.map(d => { const x = rs.find(r => r.district === d); return +(x.synced / x.total).toFixed(4); }), "--s1",
       { label: { show: true, position: "top", formatter: x => pct(x.value, 1), color: css("--ink-2") } })] });
 }
-function dqRows() {
-  const L = Object.fromEntries(D.listed.map(r => [r.code + r.d, r]));
-  return rows(null).map(r => { const l = L[r.code + r.d] || {}, listed = r.p === "MR" ? (l.mr || 0) : (l.ipv || 0), dop = r.opened * r.dpv;
-    const st = unbalanced(r) !== 0 ? "Stock not balanced" : r.vac > dop ? "More children than doses" : listed !== r.vac ? "Line list differs" : "No issue";
-    return { ...r, listed, dop, unb: unbalanced(r), above: r.vac > r.target, st, dayMismatch: r.src_day !== dayNo(r.d) || (l.child_day != null && l.child_day !== dayNo(r.d)) }; });
-}
-function reporting() {   // every site x vaccine x date between the first and latest date with data
-  const dates = uniq(D.site_day.map(r => r.d)).filter(dateOk).sort(), have = new Set(D.site_day.map(r => r.code + r.p + r.d)), out = [];
-  D.sites.filter(s => siteOk(s)).forEach(s => prods().forEach(p => dates.forEach(d => out.push({ s, p, d, ok: have.has(s.code + p + d) }))));
-  return out;
-}
-R["Data Quality"] = () => {
-  const q = dqRows(), rep = reporting(), approx = D.sites.filter(s => siteOk(s) && /Approx/.test(s.src)).length;
-  const cnt = f => q.filter(f).length;
-  return [
-    syncStrip("Vaccinators downsynced", "Vaccinators downsynced"),
-    `<div class="grid">${[
-      kpi("c2", "Site-day reports received (of expected)", pct(rep.filter(r => r.ok).length / rep.length), status(rep.filter(r => r.ok).length / rep.length, .95, .8)),
-      kpi("c2", "Stock entries not balanced (received ≠ opened + returned)", fmt(cnt(r => r.unb !== 0))),
-      kpi("c2", "Child line list ≠ aggregate count", fmt(cnt(r => r.listed !== r.vac))),
-      kpi("c2", "Site-days with more children than target", fmt(cnt(r => r.above))),
-      kpi("c2", "More children than doses in opened vials", fmt(cnt(r => r.vac > r.dop))),
-      kpi("c2", "Sites with approximate location (no GPS in source)", fmt(approx)),
-    ].join("")}</div>`,
-    `<div class="grid">${card("c6", "dqRep", "Reporting completeness by cluster")}${card("c6", "dqIss", "Issues by check and cluster")}</div>`,
-    `<div class="grid">${card("c12", "dqMap", "Map: sites by most serious data-quality issue", "", "map")}</div>`,
-    `<div class="grid">${card("c12", "dqMiss", "Site-day reports missing", "", "table")}</div>`,
-    `<div class="grid">${card("c12", "dqTbl", "Site-days with issues", "", "table")}</div>`,
-    `<div class="grid">${card("c6", "dqSync", "Frontline sync rate by district", "Synthetic: vaccinators and registrars who synced at least once")}${card("c6", "dqDown", "Downsync rate by district", "Synthetic: vaccinators who downsynced at least once")}</div>`,
-    `<div class="grid"><div class="card c12 banner">Campaign day is taken from the date (9 Nov = day 1). The source workbook numbers days differently by sheet: Children calls 10 Nov day 1, while Agg and Stock call it day 2 (${cnt(r => r.dayMismatch)} site-days affected). Sync figures are synthetic: the field database has no app sync records. Sites with approximate location have no coordinates in the source and could not be found in OpenStreetMap; they sit at their cluster centre.</div></div>`,
-    () => {
-      const cl = uniq(D.sites.filter(s => siteOk(s)).map(s => s.cluster));
-      draw("dqRep", { tooltip: Object.assign(base().tooltip, pctTip), xAxis: axisCat(cl), yAxis: axisVal(v => pct(v), { max: 1 }),
-        series: prods().map(p => barS(p, cl.map(c => { const rs = rep.filter(r => r.p === p && r.s.cluster === c); return +(rs.filter(r => r.ok).length / rs.length).toFixed(4); }), VCOL[p],
-          { label: { show: true, position: "top", formatter: x => pct(x.value), color: css("--ink-2") } })) });
-      const checks = [["Stock not balanced", r => r.unb !== 0, "--critical"], ["More children than doses", r => r.vac > r.dop, "--s2"], ["Above target", r => r.above, "--warning"], ["Line list differs", r => r.listed !== r.vac, "--s4"]];
-      draw("dqIss", { xAxis: axisCat(cl), yAxis: axisVal(), series: checks.map(([n, f, c]) => barS(n, cl.map(k => q.filter(r => S(r.code).cluster === k && f(r)).length), c, { stack: "x", itemStyle: { color: css(c) } })) });
-      const order = ["Stock not balanced", "More children than doses", "Line list differs", "No issue"];
-      statusMap("dqMap", s => { const sts = q.filter(r => r.code === s.code).map(r => r.st); return order.find(o => sts.includes(o)) || "No issue"; },
-        { "Stock not balanced": "--critical", "More children than doses": "--s2", "Line list differs": "--warning", "No issue": "--good" }, (s, st) => `<b>${esc(s.name)}</b><br>${st}`);
-      syncBars("dqSync", "Frontline workers", "Sync rate"); syncBars("dqDown", "Vaccinators downsynced", "Downsync rate");
-      table("dqMiss", [{ h: "Date", l: 1, f: r => dlabel(r.d) }, { h: "Cluster", l: 1, f: r => esc(r.s.cluster) }, { h: "Site", l: 1, f: r => esc(r.s.name) }, { h: "Vaccine", l: 1, k: "p" }],
-        rep.filter(r => !r.ok).sort((a, b) => a.d.localeCompare(b.d) || a.s.cluster.localeCompare(b.s.cluster)));
-      table("dqTbl", [{ h: "Date", l: 1, f: r => dlabel(r.d) }, { h: "Cluster", l: 1, f: r => esc(S(r.code).cluster) }, { h: "Site", l: 1, f: r => esc(S(r.code).name) }, { h: "Vaccine", l: 1, k: "p" },
-        { h: "Status", l: 1, k: "st" }, { h: "Children (aggregate)", f: r => fmt(r.vac) }, { h: "Children in line list", f: r => fmt(r.listed) }, { h: "Doses in opened vials", f: r => fmt(r.dop) },
-        { h: "Target", f: r => fmt(r.target) }, { h: "Vials not accounted for", f: r => fmt(r.unb), bg: r => redIf(r.unb !== 0) }],
-        q.filter(r => r.st !== "No issue" || r.above).sort((a, b) => Math.abs(b.unb) - Math.abs(a.unb)));
-    },
-  ];
-};
+R["Data Quality"] = () => [
+  syncStrip("Vaccinators downsynced", "Vaccinators downsynced", "Downsynced at least once", "Downsync rate"),
+  syncStrip("Frontline workers", "Frontline workers", "Synced at least once", "Sync rate", "Vaccinators and registrars · synthetic until HCM is connected"),
+  `<div class="grid">${card("c6", "dqSync", "Frontline sync rate by district", "Synthetic: vaccinators and registrars who synced at least once")}${card("c6", "dqDown", "Downsync rate by district", "Synthetic: vaccinators who downsynced at least once")}</div>`,
+  `<div class="grid"><div class="card c12 banner">Sync figures are synthetic: the field database has no app sync records, so each frontline user in the microplan (vaccinators and registrars) gets a stable synthetic status until HCM is connected. Shown only for districts that uploaded field data; the cluster, site, vaccine and date filters do not apply.</div></div>`,
+  () => { syncBars("dqSync", "Frontline workers", "Sync rate"); syncBars("dqDown", "Vaccinators downsynced", "Downsync rate"); },
+];
 
 // ---------------------------------------------------------------- wiring
 function render() {

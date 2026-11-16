@@ -175,45 +175,6 @@ SELECT date_diff('day', {CAMPAIGN_START}, max(CAST(event_date AS date))) + 1 AS 
 FROM {SITE_DAY}"""
 
 
-def ds_dq():
-    """Data-quality checks per site x date x vaccine: stock balance, line list vs aggregate, targets, vials, day labels."""
-    return f"""
-WITH b AS ({site_day_base()}),
- l AS (SELECT site_code, CAST(event_date AS date) AS event_date, sum(mr) AS mr, sum(ipv) AS ipv FROM {CHILD} GROUP BY 1, 2),
- cs AS (SELECT site_code, CAST(event_date AS date) AS event_date, max(source_campaign_day) AS child_day FROM {CHILD} GROUP BY 1, 2)
-SELECT b.region, b.district, b.cluster, b.site_code, b.site_name, b.facility_type, b.latitude, b.longitude,
-       b.product, b.product_label, b.event_date, b.campaign_day, b.source_campaign_day,
-       b.vaccinated, b.target, b.doses_opened, b.stock_unbalanced_vials,
-       CAST(coalesce(CASE b.product WHEN 'MR' THEN l.mr ELSE l.ipv END, 0) AS double) AS children_listed,
-       CASE WHEN b.stock_unbalanced_vials <> 0 THEN 1 ELSE 0 END AS stock_unbalanced,
-       CASE WHEN b.vials_received IS NULL THEN 1 ELSE 0 END AS stock_missing,
-       CASE WHEN coalesce(CASE b.product WHEN 'MR' THEN l.mr ELSE l.ipv END, 0) <> b.vaccinated THEN 1 ELSE 0 END AS list_vs_aggregate_mismatch,
-       CASE WHEN b.vaccinated > b.target THEN 1 ELSE 0 END AS above_target,
-       CASE WHEN b.vaccinated > b.doses_opened THEN 1 ELSE 0 END AS more_children_than_doses,
-       CASE WHEN b.source_campaign_day <> b.campaign_day OR cs.child_day <> b.campaign_day THEN 1 ELSE 0 END AS day_label_mismatch,
-       CASE WHEN s.coord_source LIKE 'Approximate%' THEN 1 ELSE 0 END AS approximate_location,
-       CASE WHEN b.stock_unbalanced_vials <> 0 THEN 'Stock not balanced'
-            WHEN b.vaccinated > b.doses_opened THEN 'More children than doses'
-            WHEN coalesce(CASE b.product WHEN 'MR' THEN l.mr ELSE l.ipv END, 0) <> b.vaccinated THEN 'Line list differs'
-            ELSE 'No issue' END AS dq_status
-FROM b
-JOIN {MP}.dim_site s ON s.site_code = b.site_code
-LEFT JOIN l ON l.site_code = b.site_code AND l.event_date = b.event_date
-LEFT JOIN cs ON cs.site_code = b.site_code AND cs.event_date = b.event_date"""
-
-
-def ds_reporting():
-    """Reporting completeness: every site x vaccine x campaign date from the first to the latest date with data."""
-    return f"""
-WITH b AS ({site_day_base()}),
- d AS (SELECT DISTINCT event_date FROM b),
- v AS (SELECT DISTINCT product FROM b)
-SELECT s.region, s.district, s.cluster, s.site_code, s.site_name, s.facility_type, v.product, d.event_date,
-       CASE WHEN b.site_code IS NULL THEN 0 ELSE 1 END AS reported, 1 AS expected
-FROM {MP}.dim_site s CROSS JOIN d CROSS JOIN v
-LEFT JOIN b ON b.site_code = s.site_code AND b.event_date = d.event_date AND b.product = v.product"""
-
-
 def ds_sync():
     """App sync per frontline user (SYNTHETIC until HCM is connected), for districts that uploaded field data:
     'Frontline workers' = vaccinators and registrars who synced at least once; 'Vaccinators downsynced'."""
@@ -240,8 +201,6 @@ DATASETS = {
     "field_stock_flow": (ds_stock_flow, "event_date"),
     "field_stock_days": (ds_stock_days, None),
     "field_campaign_day": (ds_campaign_day, None),
-    "field_dq": (ds_dq, "event_date"),
-    "field_reporting": (ds_reporting, "event_date"),
     "field_sync": (ds_sync, None),
 }
 

@@ -13,7 +13,7 @@ Field database (.xlsx) ──► tools/load_field_data.py ──► Elasticsearc
                                                           field-child-v1     (one doc per child)
                                                           field-site-day-v1  (one doc per site × date × vaccine)
 Elasticsearch ──► Trino (elasticsearch connector) ──┐
-Postgres "microplan" ──► Trino (postgresql) ────────┴──► Superset 6.1 (14 virtual datasets, 78 charts)
+Postgres "microplan" ──► Trino (postgresql) ────────┴──► Superset 6.1 (12 virtual datasets, 70 charts)
   dim_site, districts, region/district shapes, products       60 s cache, 5 min auto-refresh
 ```
 
@@ -30,7 +30,7 @@ The dashboard has four tabs. Supervision and Complaints are hidden for this rele
 | Overview | Per vaccine: children vaccinated, target, coverage of target, wastage, vials opened, sites reporting; pie of vaccinated vs remaining to target; coverage by region and by district; coverage maps by district; health-facility map by type; gender distribution |
 | Coverage | Coverage maps by region; coverage by region, district, cluster and site; children vaccinated by age group (labels as in the source); planned vs actual (cumulative); children per day; children by vaccines received; site summary table |
 | Inventory | Stores and sites with a stock entry; vials in hand in the district store; campaign day; vials received, additional, opened, returned unopened, issued (net) and wastage per vaccine; "x days of stock · Day n of 11"; days of stock by site with a campaign-days-remaining line; wastage by district and by site with the 5% allowed line; cumulative vials issued vs needed by site; full-width Sankey (national > regional > district store > site > opened / returned); stock maps; stock table by site and day |
-| Data Quality | Vaccinators-downsynced strip, frontline sync and downsync rates by district (synthetic until HCM is connected); reporting completeness; stock entries not balanced; line list vs aggregate; children above target; more children than doses; approximate locations; issues by cluster; data-quality map; missing reports; site-days with issues |
+| Data Quality | App sync only (synthetic until HCM is connected): vaccinators downsynced and frontline workers synced (total, synced at least once, rate); frontline sync rate and downsync rate by district |
 
 **Planned figures are scoped to the data.** Target is the sum of the daily site targets for the sites and days that uploaded data, so coverage is never compared with the national plan, and every filter changes numerator and denominator together.
 

@@ -4,7 +4,7 @@ Superset 6.1 dashboard for the DIGIT HCM **Namibia IPV + MR integrated campaign*
 
 ## Where the work stands
 
-- **Done:** the live stack (Superset → Trino → Elasticsearch + Postgres) with 4 tabs (Overview, Coverage, Inventory, Data Quality), 78 charts and native filters, restructured per the 16 Nov 2026 review. It runs on the **Zambezi region field database** (real field data for 10–11 Nov, 3 clusters, 23 sites), not synthetic data.
+- **Done:** the live stack (Superset → Trino → Elasticsearch + Postgres) with 4 tabs (Overview, Coverage, Inventory, Data Quality), 70 charts and native filters, restructured per the 16 Nov 2026 review. It runs on the **Zambezi region field database** (real field data for 10–11 Nov, 3 clusters, 23 sites), not synthetic data.
 - **Done:** `static/`, a standalone review page with the same tabs. `static/data.json` (aggregates only) is git-ignored.
 - **Done:** `docs/HCM_Elastic_Plug-in_Sheet.xlsx`, rewritten for the two field indexes.
 - **Next:**
@@ -47,7 +47,7 @@ From the product owner, the 16 Nov review or the data. Change them only after as
 - **Facility type from the site name**; other sites are outreach points; Masokotwani is a school.
 - **Site coordinates:** from the workbook where present, otherwise OSM Nominatim; Homba Clinic and Nchichimani are at their cluster centre (flagged).
 - **All three clusters sit in microplan district Katima Mulilo (Zambezi).**
-- **Sync is synthetic** (owner asked to keep the old sync charts on Data Quality): `field-user-sync-v1`, one doc per vaccinator / registrar, flagged `synthetic = 1`, shown only for districts with field data. Replace with HCM sync / downsync data when connected.
+- **Data Quality shows app sync only** (owner's instruction; the field-data checks such as stock balance and line list vs aggregate were removed). **Sync is synthetic**: `field-user-sync-v1`, one doc per vaccinator / registrar, flagged `synthetic = 1`, shown only for districts with field data. Replace with HCM sync / downsync data when connected.
 - **Gender is synthetic** (owner's request): stable per child id, about 50.7% male, flagged `gender_synthetic = 1` and labelled synthetic on both dashboards. A real `Gender`/`Sex` column in the workbook takes over automatically.
 - **District shapes are approximate** (Voronoi cells around district seats). Official shapes, when they exist, replace `data/districts.geojson`.
 
