@@ -78,6 +78,12 @@ section.tab { display: none; } section.tab.on { display: block; }
 .bar { height: 8px; background: var(--grid); border-radius: 4px; margin-top: 6px; overflow: hidden; }
 .bar > i { display: block; height: 100%; border-radius: 4px; }
 .chart { height: 320px; } .chart.tall { height: 420px; }
+.zoomwrap { height: 560px; overflow: auto; border: 1px solid var(--grid); border-radius: 8px; cursor: grab; }
+.zoomwrap.drag { cursor: grabbing; user-select: none; }
+.zoomwrap .chart { height: 100%; width: 100%; min-width: 100%; }
+.zoombar { display: inline-flex; gap: 4px; align-items: center; margin-left: auto; margin-right: 6px; }
+.zoombar .mini { min-width: 26px; font-size: 13px; }
+.zoombar span { font-size: 11px; color: var(--muted); min-width: 38px; text-align: center; }
 .map { height: 430px; border-radius: 8px; z-index: 0; }
 .legend { display: flex; gap: 10px; flex-wrap: wrap; font-size: 12px; color: var(--ink-2); margin-top: 8px; align-items: center; }
 .legend .sw { width: 22px; height: 10px; display: inline-block; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
@@ -225,10 +231,13 @@ function kpi(cls, title, value, extra = "", barFrac = null, barColor = "--s1") {
 }
 function card(cls, id, title, note = "", kind = "chart") {
   const inner = kind === "map" ? `<div class="map" id="${id}"></div><div class="legend" id="${id}-lg"></div>`
-              : kind === "table" ? `<div class="tbl" id="${id}"></div>` : `<div class="chart ${kind === "tall" ? "tall" : ""}" id="${id}"></div>`;
+              : kind === "table" ? `<div class="tbl" id="${id}"></div>`
+              : kind === "zoom" ? `<div class="zoomwrap" id="${id}-wrap"><div class="chart" id="${id}"></div></div>`
+              : `<div class="chart ${kind === "tall" ? "tall" : ""}" id="${id}"></div>`;
   const tool = kind === "table" ? `<button class="mini" data-csv="${id}" title="Download this table as CSV">CSV</button>`
              : kind === "map" ? "" : `<button class="mini" data-png="${id}" title="Download this chart as PNG">PNG</button>`;
-  return `<div class="card ${cls}"><h3><span data-title="${id}">${title}</span>${tool}</h3>${note ? `<p class="note">${note}</p>` : ""}${inner}</div>`;
+  const zoom = kind !== "zoom" ? "" : `<span class="zoombar" role="group" aria-label="Zoom"><button class="mini" data-zoom="${id}" data-z="-1" title="Zoom out" aria-label="Zoom out">−</button><span id="${id}-zl">100%</span><button class="mini" data-zoom="${id}" data-z="1" title="Zoom in" aria-label="Zoom in">+</button><button class="mini" data-zoom="${id}" data-z="0" title="Reset zoom">Reset</button></span>`;
+  return `<div class="card ${cls}"><h3><span data-title="${id}">${title}</span>${zoom}${tool}</h3>${note ? `<p class="note">${note}</p>` : ""}${inner}</div>`;
 }
 function table(id, cols, rs) {
   const el = document.getElementById(id); if (!el) return;
@@ -252,6 +261,26 @@ const axisCat = (data, rotate = 0) => ({ type: "category", data, axisLine: { lin
 const axisVal = (f = v => fmt(v), extra = {}) => Object.assign({ type: "value", splitLine: { lineStyle: { color: css("--grid") } }, axisLabel: { color: css("--muted"), formatter: f } }, extra);
 const barS = (name, data, color, extra = {}) => Object.assign({ name, type: "bar", data, barMaxWidth: 26, itemStyle: { color: css(color), borderRadius: [4, 4, 0, 0] } }, extra);
 const refLine = (y, label, f = v => v) => ({ silent: true, symbol: "none", lineStyle: { color: css("--critical"), type: "dashed", width: 2 }, label: { formatter: label, color: css("--critical"), position: "insideEndTop" }, data: [{ yAxis: f(y) }] });
+// ---------------------------------------------------------------- zoom for large charts (Sankey)
+const ZOOMS = [1, 1.5, 2, 3, 4], zoomAt = {};
+function applyZoom(id) {
+  const el = document.getElementById(id), wrap = document.getElementById(id + "-wrap"); if (!el || !wrap) return;
+  const z = ZOOMS[zoomAt[id] || 0], cx = (wrap.scrollLeft + wrap.clientWidth / 2) / wrap.scrollWidth, cy = (wrap.scrollTop + wrap.clientHeight / 2) / wrap.scrollHeight;
+  el.style.width = (z * 100) + "%"; el.style.height = (z * 100) + "%";
+  charts[id]?.resize();
+  wrap.scrollLeft = cx * wrap.scrollWidth - wrap.clientWidth / 2; wrap.scrollTop = cy * wrap.scrollHeight - wrap.clientHeight / 2;
+  document.getElementById(id + "-zl").textContent = Math.round(z * 100) + "%";
+}
+function wireZoom(id) {
+  const wrap = document.getElementById(id + "-wrap"); if (!wrap) return;
+  applyZoom(id);
+  wrap.addEventListener("wheel", e => { if (!e.ctrlKey && !e.metaKey) return; e.preventDefault();
+    zoomAt[id] = Math.max(0, Math.min(ZOOMS.length - 1, (zoomAt[id] || 0) + (e.deltaY < 0 ? 1 : -1))); applyZoom(id); }, { passive: false });
+  wrap.addEventListener("mousedown", e => { zdrag = { wrap, x: e.clientX, y: e.clientY, l: wrap.scrollLeft, t: wrap.scrollTop }; wrap.classList.add("drag"); });
+}
+let zdrag = null;   // one drag at a time; window listeners are added once
+window.addEventListener("mousemove", e => { if (!zdrag) return; zdrag.wrap.scrollLeft = zdrag.l - (e.clientX - zdrag.x); zdrag.wrap.scrollTop = zdrag.t - (e.clientY - zdrag.y); });
+window.addEventListener("mouseup", () => { if (zdrag) zdrag.wrap.classList.remove("drag"); zdrag = null; });
 function draw(id, opt) {
   const el = document.getElementById(id); if (!el) return;
   charts[id]?.dispose();
@@ -407,7 +436,7 @@ R.Inventory = () => {
     `<div class="grid">${card("c12", "ivWS", "Wastage % by site (allowed 5%)")}</div>`,
     `<div class="grid">${prods().map(p => card("c6", `ivCum${p}`, `${p}: cumulative vials issued (net) vs vials needed, by site`, "Red bars: sites without enough vials to reach their target (vials needed = target ÷ doses per vial × 1.05)")).join("")}</div>`,
     `<div class="grid">${card("c12", "ivCumT", "Cumulative stock by facility (red = not enough vials for target)", "", "table")}</div>`,
-    `<div class="grid">${card("c12", "ivSankey", "Stock flow in vials: national > regional > district store > site > opened / returned unopened", "Store layers are not in the field database: they are the sums of the site layer. Pick MR or IPV in the Vaccine filter to see one flow.", "tall")}</div>`,
+    `<div class="grid">${card("c12", "ivSankey", "Stock flow in vials: national > regional > district store > site > opened / returned unopened", "Store layers are not in the field database: they are the sums of the site layer. Pick MR or IPV in the Vaccine filter to see one flow. Zoom with − / + (or Ctrl + scroll) and drag to move around.", "zoom")}</div>`,
     `<div class="grid">${prods().map(p => card("c6", `ivMap${p}`, `Map: sites by cumulative stock against need (${p})`, "", "map")).join("")}</div>`,
     `<div class="grid">${card("c12", "ivTbl", "Stock by site and campaign day", "", "table")}</div>`,
     () => {
@@ -444,6 +473,7 @@ R.Inventory = () => {
       draw("ivSankey", { tooltip: { trigger: "item", valueFormatter: v => fmt(v) + " vials" }, legend: { show: false },
         series: [{ type: "sankey", orient: "horizontal", left: 8, right: 160, top: 10, bottom: 10, nodeGap: 4, data: nodes, links: L2, emphasis: { focus: "adjacency" },
           label: { color: css("--ink-2"), fontSize: 10 }, lineStyle: { color: "gradient", opacity: .35 } }] });
+      wireZoom("ivSankey");
       prods().forEach(p => statusMap(`ivMap${p}`, s => { const rs = D.site_day.filter(r => r.code === s.code && r.p === p && dateOk(r.d)); return !rs.length ? "No stock data" : sum(rs, net) < sum(rs, need) ? "Not enough vials for target" : "Enough vials for target"; },
         { "Not enough vials for target": "--critical", "Enough vials for target": "--good", "No stock data": "--muted" }, (s, st) => {
           const rs = D.site_day.filter(r => r.code === s.code && r.p === p && dateOk(r.d)), iss = sum(rs, net), nd = sum(rs, need), gap = iss - nd;
@@ -588,7 +618,8 @@ function wireActions() {
   document.addEventListener("keydown", e => { if (e.key === "Escape" && !menu.hidden) { close(); btn.focus(); } });
   document.getElementById("shareBtn").onclick = share;
   document.getElementById("main").addEventListener("click", async e => {
-    const c = e.target.closest("[data-csv]"), p = e.target.closest("[data-png]");
+    const c = e.target.closest("[data-csv]"), p = e.target.closest("[data-png]"), z = e.target.closest("[data-zoom]");
+    if (z) { const id = z.dataset.zoom, step = +z.dataset.z; zoomAt[id] = step === 0 ? 0 : Math.max(0, Math.min(ZOOMS.length - 1, (zoomAt[id] || 0) + step)); applyZoom(id); return; }
     if (c) save(`${fileBase()}_${slug(document.querySelector(`[data-title="${c.dataset.csv}"]`).textContent)}.csv`, new Blob([tableCsv(c.dataset.csv)], { type: "text/csv" }));
     if (p) save(`${fileBase()}_${slug(document.querySelector(`[data-title="${p.dataset.png}"]`).textContent)}.png`, await chartPng(p.dataset.png));
   });
