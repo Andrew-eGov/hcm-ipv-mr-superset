@@ -8,7 +8,7 @@ WITH n AS (SELECT site_code,
        sum(CASE WHEN product = 'IPV' THEN vials_issued_net END) AS ipv_issued,
        sum(CASE WHEN product = 'IPV' THEN vials_needed END) AS ipv_needed
        FROM (
-SELECT s.region, s.district, s.boundary_code, s.cluster, s.site_code, s.site_name, s.facility_type, s.latitude, s.longitude,
+SELECT s.region, s.district, s.boundary_code, s.site_code, s.site_name, s.facility_type, s.latitude, s.longitude,
        f.vaccine AS product, f.vaccine AS product_label,
        CAST(f.event_date AS date) AS event_date, f.campaign_day, f.source_campaign_day,
        CAST(f.target AS double) AS target,
@@ -26,7 +26,7 @@ SELECT s.region, s.district, s.boundary_code, s.cluster, s.site_code, s.site_nam
 FROM hcm.default."field-site-day-v1" f
 JOIN microplan.public.dim_site s ON s.site_code = f.site_code
 JOIN microplan.public.dim_product p ON p.product_code = f.vaccine) b GROUP BY 1)
-SELECT s.region, s.district, s.boundary_code, s.cluster, s.site_code, s.site_name, s.facility_type, s.site_name AS "Site", s.latitude, s.longitude, s.coord_source, s.team_note,
+SELECT s.region, s.district, s.boundary_code, s.site_code, s.site_name, s.facility_type, s.site_name AS "Site", s.latitude, s.longitude, s.coord_source, s.team_note,
        round(c.mr_coverage_pct, 1) AS mr_coverage_pct, round(c.ipv_coverage_pct, 1) AS ipv_coverage_pct,
        CASE WHEN n.mr_issued IS NULL THEN 'No stock data' WHEN n.mr_issued < n.mr_needed THEN 'Not enough vials for target' ELSE 'Enough vials for target' END AS mr_stock_status,
        CASE WHEN n.mr_issued IS NULL THEN 'No stock data' WHEN n.mr_issued < n.mr_needed THEN 'Not enough vials for target' ELSE 'Enough vials for target' END AS "MR status",
@@ -43,7 +43,7 @@ LEFT JOIN (
 SELECT site_code, sum(CASE WHEN product = 'MR' THEN vaccinated END) / nullif(sum(CASE WHEN product = 'MR' THEN target END), 0) * 100 AS mr_coverage_pct,
        sum(CASE WHEN product = 'IPV' THEN vaccinated END) / nullif(sum(CASE WHEN product = 'IPV' THEN target END), 0) * 100 AS ipv_coverage_pct
 FROM (
-SELECT s.region, s.district, s.boundary_code, s.cluster, s.site_code, s.site_name, s.facility_type, s.latitude, s.longitude,
+SELECT s.region, s.district, s.boundary_code, s.site_code, s.site_name, s.facility_type, s.latitude, s.longitude,
        f.vaccine AS product, f.vaccine AS product_label,
        CAST(f.event_date AS date) AS event_date, f.campaign_day, f.source_campaign_day,
        CAST(f.target AS double) AS target,

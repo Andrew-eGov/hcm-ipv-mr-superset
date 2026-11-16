@@ -5,7 +5,7 @@ LEFT JOIN (
 SELECT region, sum(CASE WHEN product = 'MR' THEN vaccinated END) / nullif(sum(CASE WHEN product = 'MR' THEN target END), 0) * 100 AS mr_coverage_pct,
        sum(CASE WHEN product = 'IPV' THEN vaccinated END) / nullif(sum(CASE WHEN product = 'IPV' THEN target END), 0) * 100 AS ipv_coverage_pct
 FROM (
-SELECT s.region, s.district, s.boundary_code, s.cluster, s.site_code, s.site_name, s.facility_type, s.latitude, s.longitude,
+SELECT s.region, s.district, s.boundary_code, s.site_code, s.site_name, s.facility_type, s.latitude, s.longitude,
        f.vaccine AS product, f.vaccine AS product_label,
        CAST(f.event_date AS date) AS event_date, f.campaign_day, f.source_campaign_day,
        CAST(f.target AS double) AS target,

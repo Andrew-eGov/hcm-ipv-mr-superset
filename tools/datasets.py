@@ -4,7 +4,7 @@ Facts live in Elasticsearch (tools/load_field_data.py): field-site-day-v1 (one d
 site x date x vaccine) and field-child-v1 (one doc per child). Dimensions live in the
 `microplan` Postgres catalog (dim_site, dim_district, dim_product, ...). Trino joins them.
 
-Every dataset exposes region, district, cluster and site_name where they apply (the
+Every dataset exposes region, district and site_name where they apply (the
 native filters are scoped by those column names) plus product and event_date.
 Keep SQL comments out of the SQL strings: Superset wraps them in a subquery.
 
@@ -20,7 +20,7 @@ CAMPAIGN_START = "DATE '2026-11-09'"
 CAMPAIGN_DAYS = 11
 WASTAGE_ALLOWED = 0.05
 
-DIMS = "s.region, s.district, s.boundary_code, s.cluster, s.site_code, s.site_name, s.facility_type"
+DIMS = "s.region, s.district, s.boundary_code, s.site_code, s.site_name, s.facility_type"
 
 
 def site_day_base():
@@ -53,7 +53,7 @@ def ds_site_day():
 def ds_progress_pie():
     """Vaccinated vs remaining to target, one row per site-day x vaccine x slice (Overview pie)."""
     return f"""
-SELECT b.region, b.district, b.cluster, b.site_name, b.product, b.event_date, t.slice, t.slice_order, t.children
+SELECT b.region, b.district, b.site_name, b.product, b.event_date, t.slice, t.slice_order, t.children
 FROM ({site_day_base()}) b
 CROSS JOIN UNNEST(ARRAY['Vaccinated', 'Remaining to target'], ARRAY[1, 2],
                   ARRAY[b.vaccinated, b.target - b.vaccinated]) AS t(slice, slice_order, children)"""
@@ -62,7 +62,7 @@ CROSS JOIN UNNEST(ARRAY['Vaccinated', 'Remaining to target'], ARRAY[1, 2],
 def ds_age():
     """Children vaccinated by age group; labels exactly as in the field database (differ by vaccine)."""
     return f"""
-SELECT b.region, b.district, b.cluster, b.site_name, b.product, b.product_label, b.event_date,
+SELECT b.region, b.district, b.site_name, b.product, b.product_label, b.event_date,
        t.age_group, t.age_order, t.vaccinated
 FROM ({site_day_base()}) b
 CROSS JOIN UNNEST(ARRAY['6-11 months', '14 weeks-11 months', '12-59 months', '5-10 years'], ARRAY[1, 1, 2, 3],
@@ -149,7 +149,7 @@ def ds_stock_flow():
     """Sankey links, in vials: National > Regional > District store > site > opened / returned unopened.
     Store layers are not in the field database: they are the sums of the site layer."""
     return f"""
-SELECT b.region, b.district, b.cluster, b.site_name, b.product, b.event_date, l.source, l.target, l.vials
+SELECT b.region, b.district, b.site_name, b.product, b.event_date, l.source, l.target, l.vials
 FROM ({site_day_base()}) b
 CROSS JOIN UNNEST(
   ARRAY[b.product || ' · National store', b.product || ' · ' || b.region || ' regional store',
@@ -171,14 +171,14 @@ def ds_stock_days():
 WITH b AS ({site_day_base()}),
  g AS (SELECT max(event_date) AS last_date FROM b),
  w AS (SELECT count(DISTINCT event_date) AS n FROM b, g WHERE b.event_date > date_add('day', -3, g.last_date))
-SELECT b.region, b.district, b.cluster, b.site_name, b.product, b.product_label,
+SELECT b.region, b.district, b.site_name, b.product, b.product_label,
        sum(CASE WHEN b.event_date = g.last_date THEN b.vials_returned_unopened ELSE 0 END) AS vials_in_hand,
        sum(CASE WHEN b.event_date > date_add('day', -3, g.last_date) THEN b.vials_opened ELSE 0 END) / CAST(max(w.n) AS double) AS daily_vials_opened,
        date_diff('day', {CAMPAIGN_START}, max(g.last_date)) + 1 AS campaign_day,
        {CAMPAIGN_DAYS} AS campaign_days_total,
        {CAMPAIGN_DAYS} - (date_diff('day', {CAMPAIGN_START}, max(g.last_date)) + 1) AS campaign_days_remaining
 FROM b CROSS JOIN g CROSS JOIN w
-GROUP BY 1, 2, 3, 4, 5, 6"""
+GROUP BY 1, 2, 3, 4, 5"""
 
 
 def ds_campaign_day():

@@ -1,3 +1,3 @@
-SELECT s.region, s.district, s.boundary_code, s.cluster, s.site_code, s.site_name, s.facility_type, CAST(c.event_date AS date) AS event_date, c.age_group, c.vaccine_status, 1 AS children
+SELECT s.region, s.district, s.boundary_code, s.site_code, s.site_name, s.facility_type, CAST(c.event_date AS date) AS event_date, c.age_group, c.vaccine_status, 1 AS children
 FROM hcm.default."field-child-v1" c
 JOIN microplan.public.dim_site s ON s.site_code = c.site_code

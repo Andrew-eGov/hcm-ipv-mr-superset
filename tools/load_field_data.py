@@ -7,7 +7,13 @@ Sheets -> indexes (one document per row, TOTAL rows dropped):
   Children                      -> field-child-v1     one doc per child
   Agg_MR + Stock_MR, Agg_IPV +  -> field-site-day-v1  one doc per site x date x vaccine
   Stock_IPV                                           (target, vaccinated by age group, vials)
-Sites (code, type, cluster, coordinates) come from data/sites.csv -> Postgres dim_site.
+Sites (code, type, district, coordinates) come from data/sites.csv -> Postgres dim_site.
+
+Districts: the workbook's Cluster column is the district (owner's instruction): Katima -> Katima
+Mulilo, Bukalo, Sangwali. The microplan has a single Zambezi district (Katima Mulilo), so this
+loader replaces it in dim_district / dim_district_polygon with the three districts. Their shapes
+are approximate: the Zambezi region split into Voronoi cells around each district's sites
+(written to data/zambezi_districts.geojson for the review page).
 
 Campaign day is computed from the date (9 Nov 2026 = day 1). The workbook's own
 Campaign_Day disagrees between sheets (Children: 10 Nov = day 1; Agg/Stock: day 2),
@@ -27,6 +33,8 @@ from pathlib import Path
 
 import openpyxl
 import psycopg2
+from shapely.geometry import MultiPoint, Point, mapping, shape
+from shapely.ops import voronoi_diagram
 
 ROOT = Path(__file__).resolve().parent.parent
 FIELD_XLSX = Path(os.environ.get(
@@ -34,7 +42,12 @@ FIELD_XLSX = Path(os.environ.get(
 ES_HOST, ES_PORT = os.environ.get("ES_HOST", "localhost"), int(os.environ.get("ES_PORT", "9200"))
 PG = dict(host="localhost", port=5433, user="hcm", password="hcm", dbname="microplan")
 CAMPAIGN_START = dt.date(2026, 11, 9)
-REGION, DISTRICT = "Zambezi", "Katima Mulilo"   # every cluster in the workbook sits in this microplan district
+REGION, MICROPLAN_DISTRICT = "Zambezi", "Katima Mulilo"   # the microplan's only Zambezi district
+# Workbook Cluster -> district, and boundary codes (Katima Mulilo keeps its microplan code; the two
+# new codes follow the microplan pattern and are assigned by this dashboard until official ones exist)
+DISTRICTS = {"Katima": ("Katima Mulilo", "NAMIBIA_NA_14_01_KATIMA_MULILO"),
+             "Bukalo": ("Bukalo", "NAMIBIA_NA_14_02_BUKALO"),
+             "Sangwali": ("Sangwali", "NAMIBIA_NA_14_03_SANGWALI")}
 CHILD_IDX, SITE_IDX, SYNC_IDX = "field-child-v1", "field-site-day-v1", "field-user-sync-v1"
 # Synthetic HCM indexes from tools/legacy/generate_mock.py - removed so nothing synthetic remains
 LEGACY_IDX = ["project-task-index-v1", "individual-index-v1", "household-index-v1", "stock-index-v1",
@@ -113,20 +126,57 @@ def day(date_text):
     return (dt.date.fromisoformat(str(date_text)[:10]) - CAMPAIGN_START).days + 1
 
 
+def split_districts(cur, sites):
+    """Replace the single microplan Zambezi district with the three field districts (approximate shapes)."""
+    cur.execute("SELECT * FROM dim_district WHERE region=%s AND district=%s", (REGION, MICROPLAN_DISTRICT))
+    cols = [c[0] for c in cur.description]
+    base = dict(zip(cols, cur.fetchone()))
+    zone = shape(json.loads(base["geojson"])).buffer(0)
+    by_d = {}
+    for s in sites:
+        by_d.setdefault(s["district"], []).append((float(s["longitude"]), float(s["latitude"])))
+    seeds = {d: MultiPoint(pts).centroid for d, pts in by_d.items()}
+    cells = voronoi_diagram(MultiPoint(list(seeds.values())), envelope=zone.envelope.buffer(1))
+    feats, rows, polys = [], [], []
+    for name, code in DISTRICTS.values():
+        cell = next(c for c in cells.geoms if c.contains(seeds[name]))
+        geom = cell.intersection(zone)
+        row = dict(base, boundary_code=code, district=name, geojson=json.dumps(mapping(geom)),
+                   seat_lat=seeds[name].y, seat_lon=seeds[name].x, centroid_lat=geom.centroid.y, centroid_lon=geom.centroid.x)
+        if name != MICROPLAN_DISTRICT:   # microplan targets and teams belong to the whole region (Katima Mulilo)
+            for k in cols:
+                if k.endswith(("_target", "_population", "_required")) or k.startswith(("teams_", "hr_")):
+                    row[k] = None
+        rows.append(row)
+        parts = list(geom.geoms) if geom.geom_type == "MultiPolygon" else [geom]
+        for k, part in enumerate(parts):
+            polys.append((code, REGION, name, k, json.dumps([[round(x, 5), round(y, 5)] for x, y in part.exterior.coords])))
+        feats.append({"type": "Feature", "properties": {"boundary_code": code, "district": name, "region": REGION},
+                      "geometry": mapping(geom)})
+    cur.execute("DELETE FROM dim_district WHERE region=%s", (REGION,))
+    cur.execute("DELETE FROM dim_district_polygon WHERE region=%s", (REGION,))
+    cur.executemany(f"INSERT INTO dim_district ({','.join(cols)}) VALUES ({','.join(['%s'] * len(cols))})",
+                    [tuple(r[c] for c in cols) for r in rows])
+    cur.executemany("INSERT INTO dim_district_polygon VALUES (%s,%s,%s,%s,%s)", polys)
+    (ROOT / "data/zambezi_districts.geojson").write_text(json.dumps({"type": "FeatureCollection", "features": feats}))
+
+
 def load_sites():
     sites = list(csv.DictReader(open(ROOT / "data/sites.csv")))
     conn = psycopg2.connect(**PG)
     cur = conn.cursor()
+    cur.execute("SELECT count(*) FROM dim_district WHERE region=%s", (REGION,))
+    if cur.fetchone()[0] == 1:   # fresh microplan load (one Zambezi district): split it into the three field districts
+        split_districts(cur, sites)
+    codes = {name: code for name, code in DISTRICTS.values()}
     cur.execute("""DROP TABLE IF EXISTS dim_site;
-        CREATE TABLE dim_site (site_code text PRIMARY KEY, site_name text, cluster text, facility_type text,
+        CREATE TABLE dim_site (site_code text PRIMARY KEY, site_name text, facility_type text,
           team_note text, region text, district text, boundary_code text,
           latitude double precision, longitude double precision, coord_source text)""")
-    cur.execute("SELECT boundary_code FROM dim_district WHERE region=%s AND district=%s", (REGION, DISTRICT))
-    bcode = cur.fetchone()[0]
-    cur.executemany("INSERT INTO dim_site VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
-                    [(s["site_code"], s["site_name"], s["cluster"], s["facility_type"], s["team_note"] or None,
-                      REGION, DISTRICT, bcode, float(s["latitude"]), float(s["longitude"]), s["coord_source"])
-                     for s in sites])
+    cur.executemany("INSERT INTO dim_site VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                    [(s["site_code"], s["site_name"], s["facility_type"], s["team_note"] or None,
+                      REGION, s["district"], codes[s["district"]], float(s["latitude"]), float(s["longitude"]),
+                      s["coord_source"]) for s in sites])
     conn.commit()
     return sites
 

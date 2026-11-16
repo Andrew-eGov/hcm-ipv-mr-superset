@@ -4,7 +4,7 @@ Superset 6.1 dashboard for the DIGIT HCM **Namibia IPV + MR integrated campaign*
 
 ## Where the work stands
 
-- **Done:** the live stack (Superset → Trino → Elasticsearch + Postgres) with 4 tabs (Overview, Coverage, Inventory, Data Quality), 70 charts and native filters, restructured per the 16 Nov 2026 review. It runs on the **Zambezi region field database** (real field data for 10–11 Nov, 3 clusters, 23 sites), not synthetic data.
+- **Done:** the live stack (Superset → Trino → Elasticsearch + Postgres) with 4 tabs (Overview, Coverage, Inventory, Data Quality), 69 charts and native filters, restructured per the 16 Nov 2026 review. It runs on the **Zambezi region field database** (real field data for 10–11 Nov, 3 districts, 23 sites), not synthetic data.
 - **Done:** `static/`, a standalone review page with the same tabs. `static/data.json` (aggregates only) is git-ignored.
 - **Done:** `docs/HCM_Elastic_Plug-in_Sheet.xlsx`, rewritten for the two field indexes.
 - **Next:**
@@ -17,7 +17,7 @@ Superset 6.1 dashboard for the DIGIT HCM **Namibia IPV + MR integrated campaign*
 
 - `tools/load_field_data.py` loads the workbook into ES: `field-child-v1` (one doc per child) and `field-site-day-v1` (one doc per site × date × vaccine, merging the Agg and Stock sheets on site code + date). It also loads `data/sites.csv` into Postgres `dim_site`.
 - `tools/datasets.py` is the **single source of truth** for every Superset dataset. Change SQL there, never in Superset's UI: `tools/build_superset.py` deletes and recreates every dataset, chart and the dashboard on each run.
-- Every dataset exposes `region`, `district`, `cluster`, `site_name`, `product` and `event_date` where they apply. The native filters are scoped by those column names.
+- Every dataset exposes `region`, `district`, `site_name`, `product` and `event_date` where they apply. The native filters are scoped by those column names.
 - Coverage denominators are the **daily site targets of the sites and days that uploaded data**. Keep it that way: the review requires planned figures to be scoped to uploading areas, never the national plan.
 
 ## Traps already hit
@@ -45,8 +45,8 @@ From the product owner, the 16 Nov review or the data. Change them only after as
 - **Sankey store layers** (national, regional, district) are synthetic sums of the site layer, as the review allows.
 - **Age-group labels as in the source:** MR 6–11 months, 12–59 months, 5–10 years; IPV 14 weeks–11 months, 12–59 months.
 - **Facility type from the site name**; other sites are outreach points; Masokotwani is a school.
-- **Site coordinates:** from the workbook where present, otherwise OSM Nominatim; Homba Clinic and Nchichimani are at their cluster centre (flagged).
-- **All three clusters sit in microplan district Katima Mulilo (Zambezi).**
+- **Site coordinates:** from the workbook where present, otherwise OSM Nominatim; Homba Clinic and Nchichimani are at their district centre (flagged).
+- **Districts come from the workbook's Cluster column** (owner's instruction): Katima → Katima Mulilo, Bukalo, Sangwali. No cluster level: Region > District > Site. `load_field_data.py` replaces the microplan's single Zambezi district with these three (approximate Voronoi shapes; Bukalo and Sangwali codes are dashboard-assigned; microplan targets and sync users stay on Katima Mulilo).
 - **Data Quality shows app sync only** (owner's instruction; the field-data checks such as stock balance and line list vs aggregate were removed). **Sync is synthetic**: `field-user-sync-v1`, one doc per vaccinator / registrar, flagged `synthetic = 1`, shown only for districts with field data. Replace with HCM sync / downsync data when connected.
 - **Gender is synthetic** (owner's request): stable per child id, about 50.7% male, flagged `gender_synthetic = 1` and labelled synthetic on both dashboards. A real `Gender`/`Sex` column in the workbook takes over automatically.
 - **District shapes are approximate** (Voronoi cells around district seats). Official shapes, when they exist, replace `data/districts.geojson`.

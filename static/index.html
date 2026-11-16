@@ -142,7 +142,6 @@ footer { color: var(--muted); font-size: 12px; padding: 0 24px 30px; max-width: 
   <div class="filters">
     <label>Region<select id="fRegion"></select></label>
     <label>District<select id="fDistrict"></select></label>
-    <label>Cluster<select id="fCluster"></select></label>
     <label>Site<select id="fSite"></select></label>
     <label>Vaccine<select id="fVaccine"><option value="">MR + IPV</option><option value="MR">MR</option><option value="IPV">IPV</option></select></label>
     <label>Campaign date<select id="fDate"></select></label>
@@ -177,7 +176,7 @@ const VAX = ["MR", "IPV"];
 const VCOL = { MR: "--s2", IPV: "--s1" };
 const WASTE_OK = 0.05;
 const FTYPES = { "Health centre": ["hc", "H"], "Clinic": ["cl", "+"], "Outreach point": ["op", ""], "School": ["sc", "S"] };
-let D, F = { region: "", district: "", cluster: "", site: "", vaccine: "", date: "" }, active = "Overview";
+let D, F = { region: "", district: "", site: "", vaccine: "", date: "" }, active = "Overview";
 const charts = {}, maps = {};
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const fmt = n => n == null || isNaN(n) ? "–" : Math.round(n).toLocaleString("en-US");
@@ -194,7 +193,7 @@ const dlabel = d => new Date(d + "T00:00:00").toLocaleDateString("en-GB", { day:
 const S = code => D.smap[code];
 function siteOk(s, ignore = "") {
   return (!F.region || s.region === F.region) && (!F.district || s.district === F.district) &&
-         (!F.cluster || s.cluster === F.cluster || ignore === "cluster") && (!F.site || s.name === F.site || ignore === "site");
+         (!F.site || s.name === F.site || ignore === "site");
 }
 const prods = () => F.vaccine ? [F.vaccine] : VAX;
 const dateOk = d => !F.date || d === F.date;
@@ -337,12 +336,12 @@ function facilityMap(id) {
   ss.forEach(s => {
     const rs = D.site_day.filter(r => r.code === s.code && dateOk(r.d));
     const covs = VAX.map(p => `${p}: ${pct(cov(rs.filter(r => r.p === p)), 0)}`).join(" · ");
-    L.marker([s.lat, s.lon], { icon: siteIcon(s.type) }).bindTooltip(`<b>${esc(s.name)}</b> (${esc(s.type)}${s.team ? ", " + esc(s.team) : ""})<br>${esc(s.cluster)} cluster<br>${covs}${/Approx/.test(s.src) ? "<br><i>Approximate location</i>" : ""}`).addTo(m);
+    L.marker([s.lat, s.lon], { icon: siteIcon(s.type) }).bindTooltip(`<b>${esc(s.name)}</b> (${esc(s.type)}${s.team ? ", " + esc(s.team) : ""})<br>${esc(s.district)} district<br>${covs}${/Approx/.test(s.src) ? "<br><i>Approximate location</i>" : ""}`).addTo(m);
     pts.push([s.lat, s.lon]);
   });
   if (pts.length) m.fitBounds(pts, { padding: [30, 30], maxZoom: 11 });
   document.getElementById(id + "-lg").innerHTML = Object.keys(FTYPES).map(t => `<span>${siteIcon(t).options.html} ${t}</span>`).join("") +
-    `<span>Type from the site name in the field database; Homba Clinic and Nchichimani have no coordinates and sit at their cluster centre.</span>`;
+    `<span>Type from the site name in the field database; Homba Clinic and Nchichimani have no coordinates and sit at their district centre.</span>`;
 }
 function statusMap(id, statusOf, colors, tip) {
   const m = mapInit(id);
@@ -389,16 +388,16 @@ R.Coverage = () => [
   `<div class="grid">${prods().map(p => card("c6", `cvMap${p}`, `Map: ${p} coverage % by region`, "", "map")).join("")}</div>`,
   `<div class="grid">${card("c6", "cvReg", "Coverage by region (MR and IPV)")}${card("c6", "cvDist", "Coverage by district (MR and IPV)")}</div>`,
   `<div class="grid">${prods().map(p => card("c6", `cvAge${p}`, `${p}: children vaccinated by age group`, "Age groups as recorded in the field database")).join("")}</div>`,
-  `<div class="grid">${card("c6", "cvClu", "Coverage by cluster (MR and IPV)")}${card("c6", "cvSite", "Coverage by site (MR and IPV)")}</div>`,
+  `<div class="grid">${card("c12", "cvSite", "Coverage by site (MR and IPV)")}</div>`,
   `<div class="grid">${card("c6", "cvPlan", "Planned vs actual, cumulative (reporting sites)", "Dotted line = planned (target) · solid filled line = actual (vaccinated)")}${card("c6", "cvDay", "Children vaccinated per day")}</div>`,
-  `<div class="grid">${card("c6", "cvStat", "Children by vaccines received")}${card("c6", "cvCluN", "Children vaccinated by cluster")}</div>`,
+  `<div class="grid">${card("c6", "cvStat", "Children by vaccines received")}${card("c6", "cvCluN", "Children vaccinated by district")}</div>`,
   `<div class="grid">${card("c12", "cvTbl", "Coverage summary by site", "", "table")}</div>`,
   () => {
     prods().forEach(p => choro(`cvMap${p}`, D.geo_regions, "region", s => s.region, p, `${p} coverage`));
     covBars("cvReg", s => s.region); covBars("cvDist", s => s.district);
     prods().forEach(p => { const g = by(D.age.filter(r => r.p === p && siteOk(S(r.code)) && dateOk(r.d)), r => r.o + "|" + r.g); const ks = Object.keys(g).sort();
       draw(`cvAge${p}`, { xAxis: axisCat(ks.map(k => k.split("|")[1])), yAxis: axisVal(), series: [barS(p, ks.map(k => sum(g[k], r => r.n)), VCOL[p], { label: { show: true, position: "top", color: css("--ink-2"), formatter: x => fmt(x.value) } })] }); });
-    covBars("cvClu", s => s.cluster); covBars("cvSite", s => s.name, 40);
+    covBars("cvSite", s => s.name, 40);
     const ds = uniq(rows(null).map(r => r.d)).sort();
     draw("cvPlan", { tooltip: Object.assign(base().tooltip, { axisPointer: { type: "line" } }), xAxis: axisCat(ds.map(dlabel)), yAxis: axisVal(),
       // legend without a fixed icon, so each entry shows its own line style (dotted planned, solid filled actual)
@@ -411,10 +410,10 @@ R.Coverage = () => [
     draw("cvDay", { xAxis: axisCat(ds.map(dlabel)), yAxis: axisVal(), series: prods().map(p => barS(p, ds.map(d => vac(rows(p).filter(r => r.d === d))), VCOL[p])) });
     const st = by(D.status.filter(r => siteOk(S(r.code)) && dateOk(r.d)), r => r.s);
     simplePie("cvStat", Object.entries(st).map(([k, v]) => ({ name: k, value: sum(v, r => r.n) })).sort((a, b) => b.value - a.value), ["--s1", "--s2", "--s3", "--s4"].map(css));
-    const cl = uniq(D.sites.filter(s => siteOk(s)).map(s => s.cluster));
-    draw("cvCluN", { xAxis: axisCat(cl), yAxis: axisVal(), series: prods().map(p => barS(p, cl.map(c => vac(rows(p).filter(r => S(r.code).cluster === c))), VCOL[p])) });
+    const dl = uniq(D.sites.filter(s => siteOk(s)).map(s => s.district));
+    draw("cvCluN", { xAxis: axisCat(dl), yAxis: axisVal(), series: prods().map(p => barS(p, dl.map(c => vac(rows(p).filter(r => S(r.code).district === c))), VCOL[p])) });
     const g = by(rows(null), r => r.code + "|" + r.p);
-    table("cvTbl", [{ h: "Cluster", l: 1, k: "cluster" }, { h: "Site", l: 1, k: "name" }, { h: "Type", l: 1, k: "type" }, { h: "Vaccine", l: 1, k: "p" },
+    table("cvTbl", [{ h: "District", l: 1, k: "district" }, { h: "Site", l: 1, k: "name" }, { h: "Type", l: 1, k: "type" }, { h: "Vaccine", l: 1, k: "p" },
       { h: "Target", f: r => fmt(r.t) }, { h: "Children vaccinated", f: r => fmt(r.v) }, { h: "Coverage of target", f: r => pct(r.v / r.t, 1), bg: r => redIf(r.v / r.t < .5) },
       { h: "Remaining to target", f: r => fmt(r.t - r.v) }],
       Object.entries(g).map(([k, rs]) => ({ ...S(rs[0].code), p: rs[0].p, t: tgt(rs), v: vac(rs) })).sort((a, b) => b.t - a.t));
@@ -458,8 +457,8 @@ R.Inventory = () => {
           series: [barS("Vials issued (net)", g.map(x => ({ value: x.iss, itemStyle: { color: css(x.iss < x.nd ? "--critical" : VCOL[p]) } })), VCOL[p]),
                    barS("Vials needed", g.map(x => x.nd), "--axis")] });
       });
-      const ct = []; sn.forEach(s => prods().forEach(p => { const rs = rows(p).filter(r => r.code === s.code); if (rs.length) ct.push({ cluster: s.cluster, name: s.name, p, iss: sum(rs, net), nd: sum(rs, need), t: tgt(rs) }); }));
-      table("ivCumT", [{ h: "Cluster", l: 1, k: "cluster" }, { h: "Site", l: 1, k: "name" }, { h: "Vaccine", l: 1, k: "p" }, { h: "Vials issued (net)", f: r => fmt(r.iss) },
+      const ct = []; sn.forEach(s => prods().forEach(p => { const rs = rows(p).filter(r => r.code === s.code); if (rs.length) ct.push({ district: s.district, name: s.name, p, iss: sum(rs, net), nd: sum(rs, need), t: tgt(rs) }); }));
+      table("ivCumT", [{ h: "District", l: 1, k: "district" }, { h: "Site", l: 1, k: "name" }, { h: "Vaccine", l: 1, k: "p" }, { h: "Vials issued (net)", f: r => fmt(r.iss) },
         { h: "Vials needed", f: r => fmt1(r.nd) }, { h: "Vials short (-) or spare (+)", f: r => fmt1(r.iss - r.nd), bg: r => redIf(r.iss < r.nd) }, { h: "Target", f: r => fmt(r.t) }],
         ct.sort((a, b) => (a.iss - a.nd) - (b.iss - b.nd)));
       const links = {};
@@ -481,11 +480,11 @@ R.Inventory = () => {
             `<br>Vials left over (returned unopened): <b>${fmt(sum(rs, r => r.ret))}</b><br>Vials used (issued net): <b>${fmt(iss)}</b>` +
             `<br>Vials needed for target: <b>${fmt1(nd)}</b><br>Vials ${gap < 0 ? "short" : "spare"}: <b>${fmt1(Math.abs(gap))}</b>` : "");
         }));
-      table("ivTbl", [{ h: "Date", l: 1, f: r => dlabel(r.d) }, { h: "Cluster", l: 1, f: r => esc(S(r.code).cluster) }, { h: "Site", l: 1, f: r => esc(S(r.code).name) }, { h: "Vaccine", l: 1, k: "p" },
+      table("ivTbl", [{ h: "Date", l: 1, f: r => dlabel(r.d) }, { h: "District", l: 1, f: r => esc(S(r.code).district) }, { h: "Site", l: 1, f: r => esc(S(r.code).name) }, { h: "Vaccine", l: 1, k: "p" },
         { h: "Vials received", f: r => fmt(r.rec) }, { h: "Additional vials received", f: r => fmt(r.add) }, { h: "Vials opened", f: r => fmt(r.opened) },
         { h: "Vials returned unopened", f: r => fmt(r.ret) }, { h: "Vials issued (net)", f: r => fmt(net(r)) }, { h: "Children vaccinated", f: r => fmt(r.vac) },
         { h: "Wastage", f: r => pct(waste([r]), 1), bg: r => redIf(waste([r]) > WASTE_OK) }],
-        rows(null).slice().sort((a, b) => a.d.localeCompare(b.d) || S(a.code).cluster.localeCompare(S(b.code).cluster) || b.opened - a.opened));
+        rows(null).slice().sort((a, b) => a.d.localeCompare(b.d) || S(a.code).district.localeCompare(S(b.code).district) || b.opened - a.opened));
     },
   ];
 };
@@ -507,7 +506,7 @@ R["Data Quality"] = () => [
   syncStrip("Vaccinators downsynced", "Vaccinators downsynced", "Downsynced at least once", "Downsync rate"),
   syncStrip("Frontline workers", "Frontline workers", "Synced at least once", "Sync rate", "Vaccinators and registrars · synthetic until HCM is connected"),
   `<div class="grid">${card("c6", "dqSync", "Frontline sync rate by district", "Synthetic: vaccinators and registrars who synced at least once")}${card("c6", "dqDown", "Downsync rate by district", "Synthetic: vaccinators who downsynced at least once")}</div>`,
-  `<div class="grid"><div class="card c12 banner">Sync figures are synthetic: the field database has no app sync records, so each frontline user in the microplan (vaccinators and registrars) gets a stable synthetic status until HCM is connected. Shown only for districts that uploaded field data; the cluster, site, vaccine and date filters do not apply.</div></div>`,
+  `<div class="grid"><div class="card c12 banner">Sync figures are synthetic: the field database has no app sync records, so each frontline user in the microplan (vaccinators and registrars) gets a stable synthetic status until HCM is connected. Shown only for districts that uploaded field data; the site, vaccine and date filters do not apply.</div></div>`,
   () => { syncBars("dqSync", "Frontline workers", "Sync rate"); syncBars("dqDown", "Vaccinators downsynced", "Downsync rate"); },
 ];
 
@@ -526,7 +525,7 @@ function render() {
 }
 
 // ---------------------------------------------------------------- share & download
-const FKEYS = ["region", "district", "cluster", "site", "vaccine", "date"];
+const FKEYS = ["region", "district", "site", "vaccine", "date"];
 function shareUrl() {
   const p = new URLSearchParams();
   if (active !== "Overview") p.set("tab", active);
@@ -537,7 +536,7 @@ function shareUrl() {
 function readUrl() {
   const p = new URLSearchParams(location.search);
   const t = p.get("tab"); if (TABS.includes(t)) active = t;
-  const ok = { region: D.sites.map(s => s.region), district: D.sites.map(s => s.district), cluster: D.sites.map(s => s.cluster), site: D.sites.map(s => s.name), vaccine: VAX, date: D.site_day.map(r => r.d) };
+  const ok = { region: D.sites.map(s => s.region), district: D.sites.map(s => s.district), site: D.sites.map(s => s.name), vaccine: VAX, date: D.site_day.map(r => r.d) };
   for (const k of FKEYS) if (ok[k].includes(p.get(k))) F[k] = p.get(k);
   return p.toString() !== "";
 }
@@ -546,7 +545,7 @@ function toast(msg) {
   document.body.appendChild(t); setTimeout(() => t.remove(), 2600);
 }
 function filterLabel() {
-  return [F.site || F.cluster || F.district || F.region || "All areas", F.vaccine || "MR + IPV", F.date ? dlabel(F.date) : "All dates with data"].join(" · ");
+  return [F.site || F.district || F.region || "All areas", F.vaccine || "MR + IPV", F.date ? dlabel(F.date) : "All dates with data"].join(" · ");
 }
 async function share() {
   const url = shareUrl(), title = `IPV-MR dashboard – ${active} (${filterLabel()})`;
@@ -570,11 +569,11 @@ function tableCsv(id) {
 }
 function siteSummary() {
   const r4 = v => v == null || !isFinite(v) ? "" : +v.toFixed(4);
-  const head = ["region", "district", "cluster", "site_code", "site", "facility_type", "vaccine", "target", "children_vaccinated", "coverage_of_target",
+  const head = ["region", "district", "site_code", "site", "facility_type", "vaccine", "target", "children_vaccinated", "coverage_of_target",
     "vials_received", "additional_vials_received", "vials_opened", "vials_returned_unopened", "vials_issued_net", "vials_needed", "wastage", "days_reported"];
   const out = [];
   D.sites.filter(s => siteOk(s)).forEach(s => prods().forEach(p => { const rs = D.site_day.filter(r => r.code === s.code && r.p === p && dateOk(r.d)); if (!rs.length) return;
-    out.push([s.region, s.district, s.cluster, s.code, s.name, s.type, p, tgt(rs), vac(rs), r4(cov(rs)), sum(rs, r => r.rec), sum(rs, r => r.add), sum(rs, r => r.opened),
+    out.push([s.region, s.district, s.code, s.name, s.type, p, tgt(rs), vac(rs), r4(cov(rs)), sum(rs, r => r.rec), sum(rs, r => r.add), sum(rs, r => r.opened),
       sum(rs, r => r.ret), sum(rs, net), r4(sum(rs, need)), r4(waste(rs)), rs.length]); }));
   return toCsv([[`# IPV-MR campaign snapshot ${D.generated} (Zambezi field database, data to day ${dayNo(lastDate())} of ${D.campaign_days}). Filters: ${filterLabel()}.`], head, ...out]);
 }
@@ -624,13 +623,12 @@ function wireActions() {
     if (p) save(`${fileBase()}_${slug(document.querySelector(`[data-title="${p.dataset.png}"]`).textContent)}.png`, await chartPng(p.dataset.png));
   });
 }
-// ---------------------------------------------------------------- filters (cascade region > district > cluster > site)
+// ---------------------------------------------------------------- filters (cascade region > district > site)
 function fillSelects() {
   const opt = (id, all, vals, cur) => { const el = document.getElementById(id); el.innerHTML = `<option value="">${all} (${vals.length})</option>` + vals.map(v => `<option>${esc(v)}</option>`).join(""); el.value = vals.includes(cur) ? cur : ""; return el.value; };
   const ss = D.sites;
   F.region = opt("fRegion", "All regions", uniq(ss.map(s => s.region)).sort(), F.region);
   F.district = opt("fDistrict", "All districts", uniq(ss.filter(s => !F.region || s.region === F.region).map(s => s.district)).sort(), F.district);
-  F.cluster = opt("fCluster", "All clusters", uniq(ss.filter(s => (!F.region || s.region === F.region) && (!F.district || s.district === F.district)).map(s => s.cluster)).sort(), F.cluster);
   F.site = opt("fSite", "All sites", ss.filter(s => siteOk(s, "site")).map(s => s.name).sort(), F.site);
   const ds = uniq(D.site_day.map(r => r.d)).sort(), fd = document.getElementById("fDate");
   // Only dates with field data can be picked; the default is all of them (preselected)
@@ -656,11 +654,11 @@ async function start() {
   D.smap = Object.fromEntries(D.sites.map(s => [s.code, s]));
   document.getElementById("tabs").innerHTML = TABS.map(t => `<button data-t="${t}">${t}</button>`).join("");
   document.getElementById("tabs").onclick = e => { if (e.target.dataset.t) { active = e.target.dataset.t; render(); } };
-  const ids = { fRegion: "region", fDistrict: "district", fCluster: "cluster", fSite: "site", fVaccine: "vaccine", fDate: "date" };
-  const order = ["region", "district", "cluster", "site"];
+  const ids = { fRegion: "region", fDistrict: "district", fSite: "site", fVaccine: "vaccine", fDate: "date" };
+  const order = ["region", "district", "site"];
   for (const [id, k] of Object.entries(ids)) document.getElementById(id).onchange = e => {
     F[k] = e.target.value; const i = order.indexOf(k); if (i >= 0) order.slice(i + 1).forEach(x => F[x] = ""); fillSelects(); render(); };
-  document.getElementById("reset").onclick = () => { F = { region: "", district: "", cluster: "", site: "", vaccine: "", date: "" }; fillSelects(); render(); };
+  document.getElementById("reset").onclick = () => { F = { region: "", district: "", site: "", vaccine: "", date: "" }; fillSelects(); render(); };
   if (!readUrl()) { try { const t = localStorage.getItem("hcm-tab"); if (TABS.includes(t)) active = t; } catch (e) {} }
   fillSelects();
   wireActions();

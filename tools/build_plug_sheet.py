@@ -96,7 +96,7 @@ KPIS = [
     ("K05", "Overview / Inventory", "Wastage %", "(doses in opened vials - children vaccinated) ÷ doses in opened vials", "vials_opened × doses per vial - total_vaccinated", "vials_opened × doses per vial", "I2", "F20 F22 F28 F31", "dim_product.doses_per_unit", "field_site_day"),
     ("K06", "Overview", "Vials opened", "Sum of vials_opened", "vials_opened", "-", "I2", "F20 F22 F31", "-", "field_site_day"),
     ("K07", "Overview", "Sites reporting", "Distinct sites with a report", "site_code", "-", "I2", "F20 F22", "dim_site", "field_site_day"),
-    ("K10", "Overview / Coverage", "Coverage by region / district / cluster / site", COV + ", grouped", "total_vaccinated", "target", "I2", "F20 F22 F23 F28", "dim_site, dim_district", "field_site_day"),
+    ("K10", "Overview / Coverage", "Coverage by region / district / site", COV + ", grouped", "total_vaccinated", "target", "I2", "F20 F22 F23 F28", "dim_site, dim_district", "field_site_day"),
     ("K11", "Overview / Coverage (map)", "Coverage maps by district and region", COV + " per area; areas without uploads stay blank", "total_vaccinated", "target", "I2", "F20 F22 F23 F28", "dim_site, dim_district_polygon, dim_region_polygon", "field_district_map, field_region_map"),
     ("K12", "Coverage", "Children vaccinated by age group", "Sum of the age-group columns, labels as in the source", "vaccinated_* columns", "-", "I2", "F20 F22 F24 F25 F26 F27", "-", "field_age"),
     ("K13", "Overview", "Gender distribution (MR, IPV)", "Children by gender, per vaccine received", "children", "-", "I1", "F02 F03 F05 F06 F08", "dim_site", "field_children"),
@@ -140,7 +140,7 @@ CHECKLIST = [
     ("Look at one real document per index (query in sheet 2, column G) and fill sheet 3 (Fields)", "Colleague", "Sheet 3"),
     ("Fill sheet 4 (Value codes): the real value for each dashboard code", "Colleague", "Sheet 4"),
     ("Check KPI readiness on sheet 5: 'Fields not yet mapped' should be 0 for every KPI", "Colleague", "Sheet 5"),
-    ("Add every real site to data/sites.csv (code, name, cluster, type, coordinates)", "Developer", "Sheet 6"),
+    ("Add every real site to data/sites.csv (code, name, district, type, coordinates)", "Developer", "Sheet 6"),
     ("Update index names and field paths in tools/datasets.py from sheets 2-4", "Developer", "tools/datasets.py"),
     ("Regenerate and test datasets: tools/datasets.py, then tools/test_datasets.sh (every dataset returns rows)", "Developer", "-"),
     ("Rebuild the dashboard: ./setup.sh --no-field-data", "Developer", "-"),
@@ -148,8 +148,8 @@ CHECKLIST = [
 ]
 
 MICROPLAN = [
-    ("dim_site", "data/sites.csv", "Site code, name, cluster, facility type, coordinates (source noted)", "Every site_code in ES must be here. Two Zambezi sites have approximate coordinates."),
-    ("dim_district", "Microplan Boundary List", "boundary_code, region, district, targets, team counts", "Sites map to districts through dim_site."),
+    ("dim_site", "data/sites.csv", "Site code, name, district, facility type, coordinates (source noted)", "Every site_code in ES must be here. Two Zambezi sites have approximate coordinates."),
+    ("dim_district", "Microplan Boundary List", "boundary_code, region, district, targets, team counts", "Sites map to districts through dim_site. Zambezi is split into the field districts Katima Mulilo, Bukalo and Sangwali (from the workbook's Cluster column); Bukalo and Sangwali codes are dashboard-assigned and have no microplan targets."),
     ("dim_district_polygon / dim_region_polygon", "data/districts.geojson, data/regions.geojson", "Shapes for the coverage maps", "District shapes are approximate - replace with official ones if available."),
     ("dim_product", "tools/load_microplan.py (PRODUCTS)", "Doses per vial, eligible ages, allowed wastage", "MR 5 and IPV 10 doses per vial, inferred from the field data - confirm."),
     ("dim_campaign_day", "tools/load_microplan.py", "Campaign days 1-11", ""),

@@ -55,7 +55,7 @@ def main():
     out = {"generated": dt.datetime.utcnow().isoformat(timespec="seconds") + "Z", "campaign_days": DS.CAMPAIGN_DAYS,
            "campaign_start": "2026-11-09"}
     out["sites"] = ds(DS.ds_sites, "site_code AS code, site_name AS name, region, district, boundary_code AS bcode, "
-                      "cluster, facility_type AS type, team_note AS team, latitude AS lat, longitude AS lon, coord_source AS src")
+                      "facility_type AS type, team_note AS team, latitude AS lat, longitude AS lon, coord_source AS src")
     out["site_day"] = ds(DS.ds_site_day, "site_code AS code, product AS p, event_date AS d, target, vaccinated AS vac, "
                          "vials_received AS rec, additional_vials_received AS add, vials_opened AS opened, "
                          "vials_returned_unopened AS ret, doses_per_vial AS dpv, source_campaign_day AS src_day")
@@ -71,6 +71,9 @@ def main():
                      group="1, 2, 3")
     out["districts"] = q("SELECT boundary_code AS code, region, district FROM microplan.public.dim_district ORDER BY 2, 3")
     out["geo_districts"] = geo("data/districts.geojson", ("boundary_code", "district", "region"))
+    # Zambezi: the three field districts (tools/load_field_data.py) replace the single microplan district
+    zam = geo("data/zambezi_districts.geojson", ("boundary_code", "district", "region"))
+    out["geo_districts"]["features"] = [f for f in out["geo_districts"]["features"] if f["properties"]["region"] != "Zambezi"] + zam["features"]
     out["geo_regions"] = geo("data/regions.geojson", ("region",))
     # Mask: everything outside Namibia, so the basemap shows Namibia only
     nam = unary_union([shape(f["geometry"]) for f in out["geo_regions"]["features"]]).buffer(0.01).simplify(0.01)

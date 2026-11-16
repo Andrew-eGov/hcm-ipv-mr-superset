@@ -1,7 +1,7 @@
-SELECT b.region, b.district, b.cluster, b.site_name, b.product, b.product_label, b.event_date,
+SELECT b.region, b.district, b.site_name, b.product, b.product_label, b.event_date,
        t.age_group, t.age_order, t.vaccinated
 FROM (
-SELECT s.region, s.district, s.boundary_code, s.cluster, s.site_code, s.site_name, s.facility_type, s.latitude, s.longitude,
+SELECT s.region, s.district, s.boundary_code, s.site_code, s.site_name, s.facility_type, s.latitude, s.longitude,
        f.vaccine AS product, f.vaccine AS product_label,
        CAST(f.event_date AS date) AS event_date, f.campaign_day, f.source_campaign_day,
        CAST(f.target AS double) AS target,
