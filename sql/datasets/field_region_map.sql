@@ -2,7 +2,9 @@ SELECT r.region, r.part_no, r.polygon, c.mr_coverage_pct, c.ipv_coverage_pct,
        CASE WHEN c.region IS NULL THEN 'No data uploaded' ELSE 'Uploading' END AS upload_status
 FROM microplan.public.dim_region_polygon r
 LEFT JOIN (
-SELECT region, sum(CASE WHEN product = 'MR' THEN vaccinated END) / nullif(sum(CASE WHEN product = 'MR' THEN target END), 0) * 100 AS mr_coverage_pct,
+SELECT region, sum(CASE WHEN product = 'MR' THEN vaccinated END) AS mr_vaccinated,
+       sum(CASE WHEN product = 'IPV' THEN vaccinated END) AS ipv_vaccinated,
+       sum(CASE WHEN product = 'MR' THEN vaccinated END) / nullif(sum(CASE WHEN product = 'MR' THEN target END), 0) * 100 AS mr_coverage_pct,
        sum(CASE WHEN product = 'IPV' THEN vaccinated END) / nullif(sum(CASE WHEN product = 'IPV' THEN target END), 0) * 100 AS ipv_coverage_pct
 FROM (
 SELECT s.region, s.district, s.boundary_code, s.site_code, s.site_name, s.facility_type, s.latitude, s.longitude,

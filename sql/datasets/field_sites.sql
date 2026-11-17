@@ -27,6 +27,13 @@ FROM hcm.default."field-site-day-v1" f
 JOIN microplan.public.dim_site s ON s.site_code = f.site_code
 JOIN microplan.public.dim_product p ON p.product_code = f.vaccine) b GROUP BY 1)
 SELECT s.region, s.district, s.boundary_code, s.site_code, s.site_name, s.facility_type, s.site_name AS "Site", s.latitude, s.longitude, s.coord_source, s.team_note,
+       z.children AS "Children vaccinated", c.mr_vaccinated AS "MR delivered", c.ipv_vaccinated AS "IPV delivered",
+       z.zero_dose_children AS "Zero-dose children (synthetic)", z.zero_dose_children AS zero_dose_children,
+       CASE WHEN c.mr_coverage_pct IS NULL THEN 'No data'
+            WHEN least(c.mr_coverage_pct, coalesce(c.ipv_coverage_pct, c.mr_coverage_pct)) < 50 THEN 'Low coverage (below 50%)'
+            WHEN least(c.mr_coverage_pct, coalesce(c.ipv_coverage_pct, c.mr_coverage_pct)) < 90 THEN 'Mid coverage (50-90%)'
+            ELSE 'High coverage (90%+)' END AS coverage_status,
+       round(c.mr_coverage_pct, 0) AS "MR coverage %", round(c.ipv_coverage_pct, 0) AS "IPV coverage %",
        round(c.mr_coverage_pct, 1) AS mr_coverage_pct, round(c.ipv_coverage_pct, 1) AS ipv_coverage_pct,
        CASE WHEN n.mr_issued IS NULL THEN 'No stock data' WHEN n.mr_issued < n.mr_needed THEN 'Not enough vials for target' ELSE 'Enough vials for target' END AS mr_stock_status,
        CASE WHEN n.mr_issued IS NULL THEN 'No stock data' WHEN n.mr_issued < n.mr_needed THEN 'Not enough vials for target' ELSE 'Enough vials for target' END AS "MR status",
@@ -40,7 +47,9 @@ SELECT s.region, s.district, s.boundary_code, s.site_code, s.site_name, s.facili
        round(n.ipv_issued - n.ipv_needed, 1) AS "IPV vials short (-) or spare (+)"
 FROM microplan.public.dim_site s
 LEFT JOIN (
-SELECT site_code, sum(CASE WHEN product = 'MR' THEN vaccinated END) / nullif(sum(CASE WHEN product = 'MR' THEN target END), 0) * 100 AS mr_coverage_pct,
+SELECT site_code, sum(CASE WHEN product = 'MR' THEN vaccinated END) AS mr_vaccinated,
+       sum(CASE WHEN product = 'IPV' THEN vaccinated END) AS ipv_vaccinated,
+       sum(CASE WHEN product = 'MR' THEN vaccinated END) / nullif(sum(CASE WHEN product = 'MR' THEN target END), 0) * 100 AS mr_coverage_pct,
        sum(CASE WHEN product = 'IPV' THEN vaccinated END) / nullif(sum(CASE WHEN product = 'IPV' THEN target END), 0) * 100 AS ipv_coverage_pct
 FROM (
 SELECT s.region, s.district, s.boundary_code, s.site_code, s.site_name, s.facility_type, s.latitude, s.longitude,
@@ -62,3 +71,7 @@ FROM hcm.default."field-site-day-v1" f
 JOIN microplan.public.dim_site s ON s.site_code = f.site_code
 JOIN microplan.public.dim_product p ON p.product_code = f.vaccine) b GROUP BY site_code) c ON c.site_code = s.site_code
 LEFT JOIN n ON n.site_code = s.site_code
+LEFT JOIN (
+SELECT s.site_code AS k, count(*) AS children, sum(c.zero_dose) AS zero_dose_children,
+       100.0 * sum(c.zero_dose) / count(*) AS zero_dose_pct
+FROM hcm.default."field-child-v1" c JOIN microplan.public.dim_site s ON s.site_code = c.site_code GROUP BY 1) z ON z.k = s.site_code

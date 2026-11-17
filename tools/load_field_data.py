@@ -61,7 +61,8 @@ SITE_FIELDS = dict(vaccine=KW, event_date={"type": "date"}, campaign_day=INT, so
                    vials_returned_unopened=INT)
 CHILD_FIELDS = dict(child_id=KW, event_date={"type": "date"}, campaign_day=INT, source_campaign_day=INT,
                     site_code=KW, site_name=KW, cluster=KW, age_group=KW, ipv=INT, mr=INT, ipv_eligible=INT,
-                    vaccine_status=KW, gender=KW, gender_synthetic=INT)
+                    vaccine_status=KW, gender=KW, gender_synthetic=INT,
+                    zero_dose=INT, zero_dose_synthetic=INT, aefi=INT, aefi_synthetic=INT)
 
 
 SYNC_FIELDS = dict(user_id=KW, role_group=KW, boundary_code=KW, district=KW, synced=INT, downsynced=INT,
@@ -103,6 +104,23 @@ def synthetic_sync(cur, sites):
         docs.append((uid, dict(user_id=uid, role_group=role, boundary_code=bcode, district=district, synced=synced, downsynced=down,
                                last_sync_date=last, synthetic=1)))
     return docs
+
+
+ZERO_DOSE_RATE = {"0-11 months": 0.12, "12-59 months": 0.06, "5-10 years": 0.03}
+AEFI_PER_DOSE = 0.0012
+
+
+def synthetic_zero_dose(c):
+    """No zero-dose question in the workbook yet: a stable synthetic flag (WHO zero-dose = no prior
+    routine dose), more likely for younger children and varying by site; flagged zero_dose_synthetic = 1."""
+    site_factor = 0.5 + unit(f"zd-site-{c['Site_Code']}")
+    return int(unit(f"zd-20261109-{c['Child_ID']}") < ZERO_DOSE_RATE.get(c["Age_Group"], 0.05) * site_factor)
+
+
+def synthetic_aefi(c):
+    """No AEFI source yet: a stable synthetic case flag, about 1.2 per 1,000 doses; flagged aefi_synthetic = 1."""
+    doses = (c["MR"] or 0) + (c["IPV"] or 0)
+    return int(unit(f"aefi-20261109-{c['Child_ID']}") < AEFI_PER_DOSE * doses)
 
 
 def synthetic_gender(child_id):
@@ -239,7 +257,11 @@ def main():
                                              ipv=c["IPV"], mr=c["MR"], ipv_eligible=c["IPV_Eligible"],
                                              vaccine_status=c["Vaccine_Status"],
                                              gender=(c.get("Gender") or c.get("Sex") or synthetic_gender(c["Child_ID"])),
-                                             gender_synthetic=0 if (c.get("Gender") or c.get("Sex")) else 1)))
+                                             gender_synthetic=0 if (c.get("Gender") or c.get("Sex")) else 1,
+                                             zero_dose=c["Zero_Dose"] if c.get("Zero_Dose") is not None else synthetic_zero_dose(c),
+                                             zero_dose_synthetic=0 if c.get("Zero_Dose") is not None else 1,
+                                             aefi=c["AEFI"] if c.get("AEFI") is not None else synthetic_aefi(c),
+                                             aefi_synthetic=0 if c.get("AEFI") is not None else 1)))
 
     for idx in LEGACY_IDX:
         es("DELETE", f"/{idx}")

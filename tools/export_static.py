@@ -65,7 +65,8 @@ def main():
         r["code"] = names[r.pop("site_name")]
     out["children"] = ds(DS.ds_children, "site_code AS code, product AS p, event_date AS d, gender, sum(children) AS n",
                          group="1, 2, 3, 4")
-    out["status"] = ds(DS.ds_child_status, "site_code AS code, event_date AS d, vaccine_status AS s, sum(children) AS n",
+    out["status"] = ds(DS.ds_child_status, "site_code AS code, event_date AS d, vaccine_status AS s, sum(children) AS n, "
+                       "sum(zero_dose) AS zd, sum(aefi) AS aefi",
                        group="1, 2, 3")
     out["sync"] = ds(DS.ds_sync, "region, district, user_group AS g, count(*) AS total, sum(synced) AS synced",
                      group="1, 2, 3")

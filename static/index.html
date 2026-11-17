@@ -10,8 +10,10 @@
 <title>IPV-MR Campaign Dashboard</title>
 <meta name="robots" content="noindex">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
 <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <style>
 :root {
   color-scheme: light;
@@ -129,6 +131,8 @@ footer { color: var(--muted); font-size: 12px; padding: 0 24px 30px; max-width: 
 .fi.op { background: #1baf7a; clip-path: polygon(50% 0, 100% 100%, 0 100%); border: 0; box-shadow: none; padding-top: 5px; }
 .fi.sc { background: #8e44ad; border-radius: 3px; transform: rotate(45deg); } .fi.sc b { transform: rotate(-45deg); }
 .banner { font-size: 12.5px; color: var(--ink-2); }
+.nc { display: flex; align-items: center; justify-content: center; border-radius: 50%; color: #fff; font-weight: 700; font-size: 11px;
+      border: 2px solid var(--card); box-shadow: 0 1px 4px rgba(0,0,0,.35); text-shadow: 0 0 2px rgba(0,0,0,.45); }
 .hb { font-size: 20px; font-weight: 650; color: var(--brand); }
 </style>
 </head>
@@ -329,6 +333,69 @@ function choro(id, geo, keyProp, keyOf, p, label, fitData = false) {
   covLegend(id, label);
 }
 function siteIcon(type) { const [c, t] = FTYPES[type] || ["op", ""]; return L.divIcon({ className: "", html: `<span class="fi ${c}"><b>${t}</b></span>`, iconSize: [20, 20], iconAnchor: [10, 10] }); }
+// ---------------------------------------------------------------- zero-dose / AEFI (synthetic) and numbered site clusters
+const statusRows = () => D.status.filter(r => siteOk(S(r.code)) && dateOk(r.d));
+function zeroAefiCards() {
+  const rs = statusRows();
+  return `<div class="grid">${kpi("c6", "Zero-dose children vaccinated", fmt(sum(rs, r => r.zd)), `<div class="t">no prior routine dose · synthetic until recorded</div>`)}${
+    kpi("c6", "AEFI cases", fmt(sum(rs, r => r.aefi)), `<div class="t">adverse events following immunization · synthetic until recorded</div>`)}</div>`;
+}
+const COV_STATUS = [["Low coverage (below 50%)", "#d03b3b"], ["Mid coverage (50–90%)", "#fab219"], ["High coverage (90%+)", "#2e9e44"]];
+function covStatus(a) {   // colour = the lower of MR and IPV coverage (only the selected vaccine when the filter is set)
+  const cs = prods().map(p => a[p].t ? a[p].v / a[p].t : null).filter(v => v != null);
+  if (!cs.length) return ["No data", css("--muted")];
+  const m = Math.min(...cs); return COV_STATUS[m < .5 ? 0 : m < .9 ? 1 : 2];
+}
+function siteAgg(codes) {
+  const a = { kids: 0, zd: 0, MR: { v: 0, t: 0 }, IPV: { v: 0, t: 0 } }, set = new Set(codes);
+  D.site_day.filter(r => set.has(r.code) && dateOk(r.d)).forEach(r => { a[r.p].v += r.vac || 0; a[r.p].t += r.target || 0; });
+  statusRows().filter(r => set.has(r.code)).forEach(r => { a.kids += r.n; a.zd += r.zd; });
+  return a;
+}
+function aggTip(title, a) {
+  return `<b>${title}</b><br>Children vaccinated: <b>${fmt(a.kids)}</b><br>MR delivered: <b>${fmt(a.MR.v)}</b> (${pct(a.MR.v / a.MR.t)} of target)` +
+    `<br>IPV delivered: <b>${fmt(a.IPV.v)}</b> (${pct(a.IPV.v / a.IPV.t)} of target)<br>Zero-dose children: <b>${fmt(a.zd)}</b> <i>(synthetic)</i>` +
+    `<br>${covStatus(a)[0]}`;
+}
+function fitLater(m, pts) {   // the card may still be laying out: resize the map, then zoom to the sites
+  const go = () => { m.invalidateSize(); if (pts.length) m.fitBounds(pts, { padding: [30, 30], maxZoom: 11 }); };
+  go(); setTimeout(go, 150);
+}
+const numIcon = (n, color, size) => L.divIcon({ className: "", iconSize: [size, size],
+  html: `<div class="nc" style="width:${size}px;height:${size}px;background:${color}">${n >= 1000 ? (n / 1000).toFixed(1) + "k" : n}</div>` });
+function siteClusterMap(id) {
+  const m = mapInit(id);
+  L.geoJSON(D.geo_districts, { style: { fill: false, color: css("--axis"), weight: 1 }, interactive: false }).addTo(m);
+  const g = L.markerClusterGroup({ maxClusterRadius: 45, showCoverageOnHover: false, zoomToBoundsOnClick: true,
+    iconCreateFunction: c => { const a = siteAgg(c.getAllChildMarkers().map(x => x.options.code));
+      return numIcon(a.kids, covStatus(a)[1], 30 + Math.min(22, Math.log10(a.kids + 1) * 6)); } });
+  g.on("clustermouseover", e => { const ms = e.layer.getAllChildMarkers();
+    e.layer.bindTooltip(aggTip(`${ms.length} sites`, siteAgg(ms.map(x => x.options.code)))).openTooltip(); });
+  const pts = [];
+  D.sites.filter(s => siteOk(s)).forEach(s => { const a = siteAgg([s.code]); if (!a.kids) return;
+    g.addLayer(L.marker([s.lat, s.lon], { code: s.code, icon: numIcon(a.kids, covStatus(a)[1], 26 + Math.min(16, Math.log10(a.kids + 1) * 4)) })
+      .bindTooltip(aggTip(`${esc(s.name)} (${esc(s.district)})`, a))); pts.push([s.lat, s.lon]); });
+  m.addLayer(g); fitLater(m, pts);
+  document.getElementById(id + "-lg").innerHTML = COV_STATUS.map(([k, c]) => `<span><span class="dot" style="background:${c}"></span> ${k}</span>`).join("") +
+    `<span>Number = children vaccinated; colour = the lower of MR and IPV coverage. Zoom in to split clusters.</span>`;
+}
+function zeroDoseMap(id) {
+  const m = mapInit(id), byD = {};
+  statusRows().forEach(r => { const d = S(r.code).district; byD[d] = (byD[d] || 0) + r.zd; });
+  const ramp = ["#fde7d4", "#fbbf8f", "#f6914f", "#e0611f", "#a83a0c"], br = [25, 50, 75, 100];
+  const col = v => ramp[br.filter(t => v >= t).length];
+  const layer = L.geoJSON(D.geo_districts, {
+    style: ft => { const v = byD[ft.properties.district]; return { fillColor: v == null ? "transparent" : col(v), fillOpacity: v == null ? 0 : .8, color: css("--axis"), weight: 1 }; },
+    onEachFeature: (ft, l) => { const v = byD[ft.properties.district]; if (v != null) l.bindTooltip(`<b>${esc(ft.properties.district)}</b><br>Zero-dose children: <b>${fmt(v)}</b> <i>(synthetic)</i>`, { sticky: true }); },
+  }).addTo(m);
+  const pts = [];
+  D.sites.filter(s => siteOk(s)).forEach(s => { const a = siteAgg([s.code]); if (!a.kids) return;
+    L.marker([s.lat, s.lon], { icon: numIcon(a.zd, "#7b3fa0", 22 + Math.min(14, a.zd / 2)) })
+      .bindTooltip(`<b>${esc(s.name)}</b><br>Zero-dose children: <b>${fmt(a.zd)}</b> of ${fmt(a.kids)} vaccinated <i>(synthetic)</i>`).addTo(m); pts.push([s.lat, s.lon]); });
+  fitLater(m, pts);
+  document.getElementById(id + "-lg").innerHTML = `<span>Districts: zero-dose children</span>` + ramp.map((c, i) => `<span><span class="sw" style="background:${c}"></span>${["0–25", "25–50", "50–75", "75–100", "100+"][i]}</span>`).join("") +
+    `<span><span class="dot" style="background:#7b3fa0"></span> Sites: number = zero-dose children</span>`;
+}
 function facilityMap(id) {
   const m = mapInit(id);
   L.geoJSON(D.geo_districts, { style: { fill: false, color: css("--axis"), weight: 1 }, interactive: false }).addTo(m);
@@ -369,6 +436,7 @@ R.Overview = () => {
   ].join("")}</div>`; };
   return [
     prods().map(vkpis).join(""),
+    zeroAefiCards(),
     `<div class="grid">${prods().map(p => card("c6", `ovPie${p}`, `${p}: vaccinated vs remaining to target`)).join("")}</div>`,
     `<div class="grid">${card("c6", "ovReg", "Coverage by region (MR and IPV)")}${card("c6", "ovDist", "Coverage by district (MR and IPV)")}</div>`,
     `<div class="grid">${prods().map(p => card("c6", `ovMap${p}`, `Map: ${p} coverage % by district`, "", "map")).join("")}</div>`,
@@ -385,6 +453,8 @@ R.Overview = () => {
   ];
 };
 R.Coverage = () => [
+  zeroAefiCards(),
+  `<div class="grid">${card("c6", "cvClu", "Map: vaccination sites, clustered (numbers = children vaccinated)", "Colour shows coverage: green high, amber mid, red low. Hover for MR and IPV delivered.", "map")}${card("c6", "cvZD", "Map: zero-dose children by district and site (synthetic)", "", "map")}</div>`,
   `<div class="grid">${prods().map(p => card("c6", `cvMap${p}`, `Map: ${p} coverage % by region`, "", "map")).join("")}</div>`,
   `<div class="grid">${card("c6", "cvReg", "Coverage by region (MR and IPV)")}${card("c6", "cvDist", "Coverage by district (MR and IPV)")}</div>`,
   `<div class="grid">${prods().map(p => card("c6", `cvAge${p}`, `${p}: children vaccinated by age group`, "Age groups as recorded in the field database")).join("")}</div>`,
@@ -393,6 +463,7 @@ R.Coverage = () => [
   `<div class="grid">${card("c6", "cvStat", "Children by vaccines received")}${card("c6", "cvCluN", "Children vaccinated by district")}</div>`,
   `<div class="grid">${card("c12", "cvTbl", "Coverage summary by site", "", "table")}</div>`,
   () => {
+    siteClusterMap("cvClu"); zeroDoseMap("cvZD");
     prods().forEach(p => choro(`cvMap${p}`, D.geo_regions, "region", s => s.region, p, `${p} coverage`));
     covBars("cvReg", s => s.region); covBars("cvDist", s => s.district);
     prods().forEach(p => { const g = by(D.age.filter(r => r.p === p && siteOk(S(r.code)) && dateOk(r.d)), r => r.o + "|" + r.g); const ks = Object.keys(g).sort();

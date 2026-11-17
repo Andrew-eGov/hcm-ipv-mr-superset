@@ -41,6 +41,7 @@ C_WHITE = {"r": 190, "g": 190, "b": 190, "a": 1}
 DOT = {id(C_ORANGE): "🟠", id(C_BLUE): "🔵", id(C_GREEN): "🟢", id(C_PURPLE): "🟣", id(C_RED): "🔴", id(C_YELLOW): "🟡",
        id(C_WHITE): "⚪"}
 FACILITY_TYPES = {"Health centre": C_ORANGE, "Clinic": C_BLUE, "Outreach point": C_GREEN, "School": C_PURPLE}
+COVERAGE_STATUS = {"High coverage (90%+)": C_GREEN, "Mid coverage (50-90%)": C_YELLOW, "Low coverage (below 50%)": C_RED}
 STATUS_COLOURS = {"Not enough vials for target": C_RED, "Enough vials for target": C_GREEN, "No stock data": C_WHITE}
 
 
@@ -262,9 +263,10 @@ def choropleth(tab, row, width, name, ds, metric, height=60, legend=".0f", toolt
 
 
 def scatter(tab, row, width, name, ds, dimension=None, height=60, radius=2500, color=ORANGE, filters=(), tooltip=(),
-            viewport=ZAMBEZI):
+            viewport=ZAMBEZI, radius_metric=None):
     p = dict(spatial={"type": "latlong", "latCol": "latitude", "lonCol": "longitude"},
-             point_radius_fixed={"type": "fix", "value": radius}, point_unit="square_m", min_radius=4, max_radius=40,
+             point_radius_fixed={"type": "metric", "value": radius_metric} if radius_metric else {"type": "fix", "value": radius},
+             point_unit="square_m", min_radius=4, max_radius=40,
              multiplier=1, color_picker=color, mapbox_style=TILE, viewport=viewport, row_limit=10000,
              adhoc_filters=list(filters), autozoom=False, js_columns=[], js_data_mutator="", js_tooltip="",
              js_onclick_href="", time_range="No filter", tooltip_contents=list(tooltip))
@@ -280,7 +282,7 @@ def multimap(tab, row, width, name, layers, height=60, viewport=ZAMBEZI, ds="fie
 
 
 def point_map(tab, row, width, name, ds, column, colours, tooltip, filters=(), legend_title="", note="",
-              height=60, legend_width=3):
+              height=60, legend_width=3, radius_metric=None, radius=1800):
     """Namibia-only point map: district outlines + one point layer per category (fixed colour) + legend.
     deck.gl multi-layer maps cannot colour points by a column, so each category is its own layer."""
     if not any(c.get("name") == "Layer: district outlines" for c in CHARTS):
@@ -289,11 +291,19 @@ def point_map(tab, row, width, name, ds, column, colours, tooltip, filters=(), l
     layers = ["Layer: district outlines"]
     for cat, rgb in colours.items():
         lname = f"Layer: {name} - {cat}"
-        scatter(None, 0, 0, lname, ds, radius=1800, color=rgb, filters=list(filters) + [F(column, "IN", [cat])],
-                tooltip=tooltip)
+        scatter(None, 0, 0, lname, ds, radius=radius, color=rgb, filters=list(filters) + [F(column, "IN", [cat])],
+                tooltip=tooltip, radius_metric=radius_metric)
         layers.append(lname)
     multimap(tab, row, width, name, layers, height=height)
     markdown(tab, row, legend_width, height, legend_html(legend_title, colours, note))
+
+
+def zero_dose_aefi_cards(tab, row, width=6):
+    """Two cards: zero-dose children and AEFI cases (both SYNTHETIC until the field data records them)."""
+    big(tab, row, width, f"{tab}: zero-dose children", "field_child_status", M("SUM(zero_dose)", "Zero-dose"),
+        "Zero-dose children vaccinated", ",d", [TIME_F()], note="no prior routine dose - synthetic until recorded")
+    big(tab, row, width, f"{tab}: AEFI cases", "field_child_status", M("SUM(aefi)", "AEFI"),
+        "AEFI cases", ",d", [TIME_F()], note="adverse events following immunization - synthetic until recorded")
 
 
 def markdown(tab, row, width, height, text):
@@ -332,6 +342,7 @@ def define(days_remaining):
             f"{v}: vials opened", ",d", f)
         big(T, r, 2, f"Overview: {v} sites reporting", "field_site_day", M("COUNT(DISTINCT site_code)", "Sites"),
             f"{v}: sites reporting", ",d", f)
+    zero_dose_aefi_cards(T, "1Z")
     for v, f in VACCINES:
         pie(T, 2, 6, f"Overview: {v} vaccinated vs remaining to target", "field_progress_pie", "slice",
             M("SUM(children)", "Children"), filters=f + [TIME_F()])
@@ -354,6 +365,19 @@ def define(days_remaining):
 
     # ---------------- Coverage
     T = "Coverage"
+    zero_dose_aefi_cards(T, 0)
+    # Map 1: vaccination sites coloured by coverage (lower of MR and IPV). deck.gl multi-layer maps cannot size or
+    # label points by a number, so the numbers (children, MR and IPV delivered, zero-dose) are in the hover tooltip.
+    point_map(T, "0m", 4, "Coverage map: vaccination sites by coverage", "field_sites", "coverage_status", COVERAGE_STATUS,
+              ("Site", "Children vaccinated", "MR delivered", "IPV delivered", "MR coverage %", "IPV coverage %",
+               "Zero-dose children (synthetic)"),
+              legend_title="Coverage", legend_width=2,
+              note="Colour = the lower of MR and IPV coverage at the site. Hover a site for children vaccinated, "
+                   "MR and IPV delivered and zero-dose children.")
+    # Map 2: zero-dose children (synthetic) by district, with the numbers in the tooltip
+    choropleth(T, "0m", 6, "Coverage map: zero-dose children by district (synthetic)", "field_district_map",
+               M("MAX(zero_dose_children)", "Zero-dose children"), tooltip=("district", "zero_dose_children", "zero_dose_pct"),
+               scheme="oranges", breaks=["0", "25", "50", "75", "100", "150"], viewport=ZAMBEZI)
     for v in ("MR", "IPV"):
         col = f"{v.lower()}_coverage_pct"
         choropleth(T, 1, 6, f"Coverage map: {v} coverage % by region", "field_region_map", M(f"MAX({col})", f"{v} coverage %"))

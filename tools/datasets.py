@@ -84,16 +84,19 @@ WHERE v.received = 1"""
 
 
 def ds_child_status():
-    """One row per child: which vaccines the child received (co-administration)."""
+    """One row per child: vaccines received, zero-dose flag and AEFI flag (both SYNTHETIC until recorded)."""
     return f"""
-SELECT {DIMS}, CAST(c.event_date AS date) AS event_date, c.age_group, c.vaccine_status, 1 AS children
+SELECT {DIMS}, CAST(c.event_date AS date) AS event_date, c.age_group, c.vaccine_status, 1 AS children,
+       c.zero_dose, c.zero_dose_synthetic, c.aefi, c.aefi_synthetic
 FROM {CHILD} c
 JOIN {MP}.dim_site s ON s.site_code = c.site_code"""
 
 
 def cov_by(key):
     return f"""
-SELECT {key}, sum(CASE WHEN product = 'MR' THEN vaccinated END) / nullif(sum(CASE WHEN product = 'MR' THEN target END), 0) * 100 AS mr_coverage_pct,
+SELECT {key}, sum(CASE WHEN product = 'MR' THEN vaccinated END) AS mr_vaccinated,
+       sum(CASE WHEN product = 'IPV' THEN vaccinated END) AS ipv_vaccinated,
+       sum(CASE WHEN product = 'MR' THEN vaccinated END) / nullif(sum(CASE WHEN product = 'MR' THEN target END), 0) * 100 AS mr_coverage_pct,
        sum(CASE WHEN product = 'IPV' THEN vaccinated END) / nullif(sum(CASE WHEN product = 'IPV' THEN target END), 0) * 100 AS ipv_coverage_pct
 FROM ({site_day_base()}) b GROUP BY {key}"""
 
@@ -108,11 +111,20 @@ LEFT JOIN ({cov_by('region')}) c ON c.region = r.region"""
 
 
 def ds_district_map():
-    """District polygons (approximate) with MR / IPV coverage for districts that uploaded data."""
+    """District polygons (approximate) with MR / IPV coverage and zero-dose children (synthetic) for districts with data."""
     return f"""
-SELECT d.region, d.district, d.boundary_code, d.part_no, d.polygon, c.mr_coverage_pct, c.ipv_coverage_pct
+SELECT d.region, d.district, d.boundary_code, d.part_no, d.polygon, c.mr_coverage_pct, c.ipv_coverage_pct,
+       z.zero_dose_children, round(z.zero_dose_pct, 1) AS zero_dose_pct
 FROM {MP}.dim_district_polygon d
-LEFT JOIN ({cov_by('boundary_code')}) c ON c.boundary_code = d.boundary_code"""
+LEFT JOIN ({cov_by('boundary_code')}) c ON c.boundary_code = d.boundary_code
+LEFT JOIN ({zero_dose_by('s.boundary_code')}) z ON z.k = d.boundary_code"""
+
+
+def zero_dose_by(key):
+    return f"""
+SELECT {key} AS k, count(*) AS children, sum(c.zero_dose) AS zero_dose_children,
+       100.0 * sum(c.zero_dose) / count(*) AS zero_dose_pct
+FROM {CHILD} c JOIN {MP}.dim_site s ON s.site_code = c.site_code GROUP BY 1"""
 
 
 def ds_sites():
@@ -129,6 +141,13 @@ WITH n AS (SELECT site_code,
        sum(CASE WHEN product = 'IPV' THEN vials_needed END) AS ipv_needed
        FROM ({site_day_base()}) b GROUP BY 1)
 SELECT {DIMS}, s.site_name AS "Site", s.latitude, s.longitude, s.coord_source, s.team_note,
+       z.children AS "Children vaccinated", c.mr_vaccinated AS "MR delivered", c.ipv_vaccinated AS "IPV delivered",
+       z.zero_dose_children AS "Zero-dose children (synthetic)", z.zero_dose_children AS zero_dose_children,
+       CASE WHEN c.mr_coverage_pct IS NULL THEN 'No data'
+            WHEN least(c.mr_coverage_pct, coalesce(c.ipv_coverage_pct, c.mr_coverage_pct)) < 50 THEN 'Low coverage (below 50%)'
+            WHEN least(c.mr_coverage_pct, coalesce(c.ipv_coverage_pct, c.mr_coverage_pct)) < 90 THEN 'Mid coverage (50-90%)'
+            ELSE 'High coverage (90%+)' END AS coverage_status,
+       round(c.mr_coverage_pct, 0) AS "MR coverage %", round(c.ipv_coverage_pct, 0) AS "IPV coverage %",
        round(c.mr_coverage_pct, 1) AS mr_coverage_pct, round(c.ipv_coverage_pct, 1) AS ipv_coverage_pct,
        CASE WHEN n.mr_issued IS NULL THEN 'No stock data' WHEN n.mr_issued < n.mr_needed THEN 'Not enough vials for target' ELSE 'Enough vials for target' END AS mr_stock_status,
        CASE WHEN n.mr_issued IS NULL THEN 'No stock data' WHEN n.mr_issued < n.mr_needed THEN 'Not enough vials for target' ELSE 'Enough vials for target' END AS "MR status",
@@ -142,7 +161,8 @@ SELECT {DIMS}, s.site_name AS "Site", s.latitude, s.longitude, s.coord_source, s
        round(n.ipv_issued - n.ipv_needed, 1) AS "IPV vials short (-) or spare (+)"
 FROM {MP}.dim_site s
 LEFT JOIN ({cov_by('site_code')}) c ON c.site_code = s.site_code
-LEFT JOIN n ON n.site_code = s.site_code"""
+LEFT JOIN n ON n.site_code = s.site_code
+LEFT JOIN ({zero_dose_by('s.site_code')}) z ON z.k = s.site_code"""
 
 
 def ds_stock_flow():
