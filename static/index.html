@@ -11,9 +11,9 @@
 <meta name="robots" content="noindex">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
-<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js" crossorigin="anonymous"></script>
 <style>
 :root {
   color-scheme: light;
@@ -311,10 +311,13 @@ function simplePie(id, data, colors) {
 const NAM = [[-29.2, 11.6], [-16.9, 25.4]];
 function mapInit(id) {
   maps[id]?.remove();
-  const m = L.map(id, { zoomSnap: 0.25, scrollWheelZoom: false, attributionControl: true });
+  // No zoom / fade / marker animations: a map removed by a quick re-render (filter or tab change)
+  // otherwise throws Leaflet's "_leaflet_pos" error from a pending animation frame.
+  const m = L.map(id, { zoomSnap: 0.25, scrollWheelZoom: false, attributionControl: true,
+                        zoomAnimation: false, fadeAnimation: false, markerZoomAnimation: false });
   L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 14, attribution: "© OpenStreetMap contributors" }).addTo(m);
   L.geoJSON(D.mask, { style: { fillColor: css("--page"), fillOpacity: 1, stroke: false }, interactive: false }).addTo(m);
-  m.fitBounds(NAM);
+  m.fitBounds(NAM, { animate: false });
   maps[id] = m; return m;
 }
 // Coverage colours, red (low) > amber (mid) > green (high); same legend on every map
@@ -332,7 +335,7 @@ function choro(id, geo, keyProp, keyOf, p, label, fitData = false) {
     style: ft => { const rs = g[ft.properties[keyProp]]; return { fillColor: covColor(rs && cov(rs)), fillOpacity: rs ? 0.85 : 0, color: css("--axis"), weight: 1 }; },
     onEachFeature: (ft, l) => { const rs = g[ft.properties[keyProp]]; l.bindTooltip(`<b>${esc(ft.properties[keyProp])}</b><br>${label}: <b>${rs ? pct(cov(rs), 1) : "no data uploaded"}</b>`, { sticky: true }); },
   }).addTo(m);
-  if (fitData) { const fs = geo.features.filter(f => g[f.properties[keyProp]]); if (fs.length) m.fitBounds(L.geoJSON({ type: "FeatureCollection", features: fs }).getBounds(), { padding: [20, 20] }); }
+  if (fitData) { const fs = geo.features.filter(f => g[f.properties[keyProp]]); if (fs.length) m.fitBounds(L.geoJSON({ type: "FeatureCollection", features: fs }).getBounds(), { padding: [20, 20], animate: false }); }
   covLegend(id, label);
 }
 function siteIcon(type) { const [c, t] = FTYPES[type] || ["op", ""]; return L.divIcon({ className: "", html: `<span class="fi ${c}"><b>${t}</b></span>`, iconSize: [20, 20], iconAnchor: [10, 10] }); }
@@ -361,7 +364,10 @@ function aggTip(title, a) {
     `<br>${covStatus(a)[0]}`;
 }
 function fitLater(m, pts) {   // the card may still be laying out: resize the map, then zoom to the sites
-  const go = () => { m.invalidateSize(); if (pts.length) m.fitBounds(pts, { padding: [30, 30], maxZoom: 11 }); };
+  const go = () => {   // skip if a re-render (filter or tab change) already removed this map
+    if (!m._container || !document.body.contains(m._container)) return;
+    m.invalidateSize(); if (pts.length) m.fitBounds(pts, { padding: [30, 30], maxZoom: 11, animate: false });
+  };
   go(); setTimeout(go, 150);
 }
 const numIcon = (n, color, size) => L.divIcon({ className: "", iconSize: [size, size],
@@ -369,7 +375,7 @@ const numIcon = (n, color, size) => L.divIcon({ className: "", iconSize: [size, 
 function siteClusterMap(id) {
   const m = mapInit(id);
   L.geoJSON(D.geo_districts, { style: { fill: false, color: css("--axis"), weight: 1 }, interactive: false }).addTo(m);
-  const g = L.markerClusterGroup({ maxClusterRadius: 45, showCoverageOnHover: false, zoomToBoundsOnClick: true,
+  const g = L.markerClusterGroup({ maxClusterRadius: 45, showCoverageOnHover: false, zoomToBoundsOnClick: true, animate: false,
     iconCreateFunction: c => { const a = siteAgg(c.getAllChildMarkers().map(x => x.options.code));
       return numIcon(a.kids, covStatus(a)[1], 30 + Math.min(22, Math.log10(a.kids + 1) * 6)); } });
   g.on("clustermouseover", e => { const ms = e.layer.getAllChildMarkers();
@@ -409,7 +415,7 @@ function facilityMap(id) {
     L.marker([s.lat, s.lon], { icon: siteIcon(s.type) }).bindTooltip(`<b>${esc(s.name)}</b> (${esc(s.type)}${s.team ? ", " + esc(s.team) : ""})<br>${esc(s.district)} district<br>${covs}${/Approx/.test(s.src) ? "<br><i>Approximate location</i>" : ""}`).addTo(m);
     pts.push([s.lat, s.lon]);
   });
-  if (pts.length) m.fitBounds(pts, { padding: [30, 30], maxZoom: 11 });
+  if (pts.length) m.fitBounds(pts, { padding: [30, 30], maxZoom: 11, animate: false });
   document.getElementById(id + "-lg").innerHTML = Object.keys(FTYPES).map(t => `<span>${siteIcon(t).options.html} ${t}</span>`).join("") +
     `<span>Type from the site name in the field database; Homba Clinic and Nchichimani have no coordinates and sit at their district centre.</span>`;
 }
@@ -422,7 +428,7 @@ function statusMap(id, statusOf, colors, tip) {
     L.circleMarker([s.lat, s.lon], { radius: 7, color: css("--card"), weight: 1.5, fillColor: css(colors[st]), fillOpacity: .95 }).bindTooltip(tip(s, st)).addTo(m);
     pts.push([s.lat, s.lon]);
   });
-  if (pts.length) m.fitBounds(pts, { padding: [30, 30], maxZoom: 11 });
+  if (pts.length) m.fitBounds(pts, { padding: [30, 30], maxZoom: 11, animate: false });
   document.getElementById(id + "-lg").innerHTML = Object.entries(colors).map(([k, c]) => `<span><span class="dot" style="background:var(${c})"></span> ${k}</span>`).join("");
 }
 
@@ -586,7 +592,7 @@ R["Data Quality"] = () => [
 // ---------------------------------------------------------------- wiring
 function render() {
   Object.values(charts).forEach(c => c.dispose()); for (const k in charts) delete charts[k];
-  Object.values(maps).forEach(m => m.remove()); for (const k in maps) delete maps[k];
+  Object.values(maps).forEach(m => { try { m.stop(); m.off(); m.remove(); } catch (e) {} }); for (const k in maps) delete maps[k];
   const main = document.getElementById("main");
   main.innerHTML = TABS.map(t => `<section class="tab ${t === active ? "on" : ""}" data-tab="${t}"></section>`).join("");
   const parts = R[active](), after = parts.pop();

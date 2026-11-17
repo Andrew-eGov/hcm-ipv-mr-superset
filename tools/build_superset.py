@@ -350,15 +350,15 @@ def define(days_remaining):
     for v, f in VACCINES:
         r = f"1{v}"
         big(T, r, 2, f"Overview: {v} children vaccinated", "field_site_day", M("SUM(vaccinated)", "Vaccinated"),
-            f"{v}: children vaccinated", ",d", f)
+            f"{v}: children vaccinated", ",d", f + [TIME_F()])
         big(T, r, 2, f"Overview: {v} target", "field_site_day", M("SUM(target)", "Target"),
-            f"{v}: target", ",d", f, note="reporting sites and days")
-        big(T, r, 2, f"Overview: {v} coverage", "field_site_day", COVERAGE, f"{v}: coverage of target", ".1%", f)
-        big(T, r, 2, f"Overview: {v} wastage", "field_site_day", WASTAGE, f"{v}: wastage (allowed 5%)", ".1%", f, note="reported figure" if v == "MR" else "")
+            f"{v}: target", ",d", f + [TIME_F()], note="reporting sites and days")
+        big(T, r, 2, f"Overview: {v} coverage", "field_site_day", COVERAGE, f"{v}: coverage of target", ".1%", f + [TIME_F()])
+        big(T, r, 2, f"Overview: {v} wastage", "field_site_day", WASTAGE, f"{v}: wastage (allowed 5%)", ".1%", f + [TIME_F()], note="reported figure" if v == "MR" else "")
         big(T, r, 2, f"Overview: {v} vials opened", "field_site_day", M("SUM(vials_opened)", "Vials opened"),
-            f"{v}: vials opened", ",d", f)
+            f"{v}: vials opened", ",d", f + [TIME_F()])
         big(T, r, 2, f"Overview: {v} sites reporting", "field_site_day", M("COUNT(DISTINCT site_code)", "Sites"),
-            f"{v}: sites reporting", ",d", f)
+            f"{v}: sites reporting", ",d", f + [TIME_F()])
     zero_dose_aefi_cards(T, "1Z")
     for v, f in VACCINES:
         pie(T, 2, 6, f"Overview: {v} vaccinated vs remaining to target", "field_progress_pie", "slice",
@@ -434,7 +434,7 @@ def define(days_remaining):
     T = "Inventory"
     big(T, 1, 3, "Inventory: stores and sites with a stock entry", "field_site_day",
         M("COUNT(DISTINCT CASE WHEN vials_received IS NOT NULL THEN site_code END)", "Sites"),
-        "Stores and sites with at least one stock entry", ",d")
+        "Stores and sites with at least one stock entry", ",d", [TIME_F()])
     for v, f in VACCINES:
         big(T, 1, 3, f"Inventory: {v} vials in hand, district store", "field_stock_days", M("SUM(vials_in_hand)", "Vials"),
             f"{v} vials in hand — district store", ",d", f, note="returned unopened on the latest day")
