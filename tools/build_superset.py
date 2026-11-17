@@ -451,6 +451,9 @@ def define(days_remaining):
         M("SUM(children)", "Children"), filters=[TIME_F()], legend=True, label="value_percent")
     bar(T, 6, 6, "Coverage: children vaccinated by cluster", "field_site_day", "cluster",
         [M("SUM(vaccinated)", "Children vaccinated")], ["product_label"], filters=[TIME_F()])
+    for v, f in VACCINES:   # share of children vaccinated by facility type, one pie per vaccine
+        pie(T, "6f", 6, f"Coverage: {v} children vaccinated by facility type", "field_site_day", "facility_type",
+            M("SUM(vaccinated)", "Children vaccinated"), filters=f + [TIME_F()], legend=True, label="key_value_percent")
     table(T, 7, 12, "Coverage summary by facility", "field_site_day", ["district", "cluster", "site_name", "facility_type", "product_label"],
           [M("SUM(target)", "Target"), M("SUM(vaccinated)", "Children vaccinated"), COVERAGE,
            M("SUM(target) - SUM(vaccinated)", "Remaining to target")],

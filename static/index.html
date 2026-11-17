@@ -363,8 +363,8 @@ function covBars(id, keyOf, rotate = 0, sort = true) {   // MR and IPV side by s
       return { value: +cov(rs).toFixed(4) || null, vac: vac(rs), tgt: tgt(rs) }; }), VCOL[p],
       { label: { show: keys.length <= 6, position: "top", formatter: x => pct(x.value), color: css("--ink-2") } })) });
 }
-function simplePie(id, data, colors) {
-  draw(id, { tooltip: { trigger: "item", valueFormatter: v => fmt(v) }, legend: { bottom: 0, left: "center", textStyle: { color: css("--ink-2") } },
+function simplePie(id, data, colors, tip) {
+  draw(id, { tooltip: Object.assign({ trigger: "item", valueFormatter: v => fmt(v) }, tip ? { formatter: tip } : {}), legend: { bottom: 0, left: "center", textStyle: { color: css("--ink-2") } },
     series: [{ type: "pie", radius: "62%", center: ["50%", "46%"], data: data.map((d, i) => ({ ...d, itemStyle: { color: colors[i], borderColor: css("--card"), borderWidth: 2 } })),
       label: { formatter: x => `${x.name}\n${fmt(x.value)} (${x.percent.toFixed(1)}%)`, color: css("--ink-2"), fontSize: 12 } }] });
 }
@@ -531,6 +531,7 @@ R.Coverage = () => [
   `<div class="grid">${card("c12", "cvSite", "Coverage by facility (MR and IPV)")}</div>`,
   `<div class="grid">${card("c6", "cvPlan", "Planned vs actual, cumulative (reporting facilities)", "Dotted line = planned (target) · solid filled line = actual (vaccinated)")}${card("c6", "cvDay", "Children vaccinated per day")}</div>`,
   `<div class="grid">${card("c6", "cvStat", "Children by vaccines received")}${card("c6", "cvCluN", "Children vaccinated by cluster")}</div>`,
+  `<div class="grid">${prods().map(p => card("c6", `cvType${p}`, `${p}: children vaccinated by facility type`, "Slice = share of children vaccinated; hover for the facility type's coverage of target")).join("")}</div>`,
   `<div class="grid">${card("c12", "cvTbl", "Coverage summary by facility", "", "table")}</div>`,
   () => {
     siteClusterMap("cvClu"); zeroDoseMap("cvZD");
@@ -555,6 +556,10 @@ R.Coverage = () => [
     simplePie("cvStat", Object.entries(st).map(([k, v]) => ({ name: k, value: sum(v, r => r.n) })).sort((a, b) => b.value - a.value), ["--s1", "--s2", "--s3", "--s4"].map(css));
     const dl = uniq(D.sites.filter(s => siteOk(s)).map(s => s.cluster));
     draw("cvCluN", { xAxis: axisCat(dl, 30), yAxis: axisVal(), series: prods().map(p => barS(p, dl.map(c => vac(rows(p).filter(r => S(r.code).cluster === c))), VCOL[p])) });
+    const TYPE_COL = { "Health centre": "--s2", "Clinic": "--s1", "Outreach point": "--s3", "School": "--s5" };
+    prods().forEach(p => { const bt = by(rows(p), r => S(r.code).type), types = Object.keys(bt).filter(t => vac(bt[t]) > 0).sort((a, b) => vac(bt[b]) - vac(bt[a]));
+      simplePie(`cvType${p}`, types.map(t => ({ name: t, value: vac(bt[t]), tgt: tgt(bt[t]), n: uniq(bt[t].map(r => r.code)).length })), types.map(t => css(TYPE_COL[t] || "--s4")),
+        x => `<b>${esc(x.name)}</b> (${x.data.n} facilit${x.data.n > 1 ? "ies" : "y"})<br>Children vaccinated: <b>${fmt(x.value)}</b> (${x.percent.toFixed(1)}% of ${p})<br>Target: <b>${fmt(x.data.tgt)}</b> · coverage of target: <b>${pct(x.value / x.data.tgt, 1)}</b>`); });
     const g = by(rows(null), r => r.code + "|" + r.p);
     table("cvTbl", [{ h: "District", l: 1, k: "district", s: r => r.district }, { h: "Cluster", l: 1, k: "cluster", s: r => r.cluster }, { h: "Facility", l: 1, k: "name", s: r => r.name }, { h: "Type", l: 1, k: "type" }, { h: "Vaccine", l: 1, k: "p" },
       { h: "Target", f: r => fmt(r.t) }, { h: "Children vaccinated", f: r => fmt(r.v) }, { h: "Coverage of target", f: r => pct(r.v / r.t, 1), bg: r => redIf(r.v / r.t < .5) },
