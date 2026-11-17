@@ -454,14 +454,6 @@ def define(days_remaining):
             f"{v}: vials issued (net)", ",d", f + [TIME_F()])
         big(T, r, 2, f"Inventory: {v} wastage", "field_site_day", WASTAGE, f"{v}: wastage % (allowed 5%)", ".1%",
             f + [TIME_F()], note="reported figure" if v == "MR" else "")
-    for v, f in VACCINES:
-        handlebars(T, 3, 6, f"Inventory: {v} days of stock left", "field_stock_days",
-                   [M("ROUND(SUM(vials_in_hand) / NULLIF(SUM(daily_vials_opened), 0), 1)", "dos"),
-                    M("MAX(campaign_day)", "day"), M("MAX(campaign_days_total)", "total")],
-                   '{{#each data}}<h2>' + v + ': {{#if dos}}{{dos}}{{else}}0{{/if}} days of stock · '
-                   'Day {{day}} of {{total}}</h2><p>Vials in hand in the district store ÷ average daily vials '
-                   'opened (last 3 days). The red line on the chart below marks the campaign days remaining.</p>'
-                   '{{/each}}', f)
     bar(T, 4, 6, "Inventory: days of stock left by site", "field_stock_days", "site_name",
         [M("SUM(vials_in_hand) / NULLIF(SUM(daily_vials_opened), 0)", "Days of stock")], ["product_label"], fmt=",.1f",
         sort_by_metric=False, x_axis_sort="Days of stock", x_axis_sort_asc=True,

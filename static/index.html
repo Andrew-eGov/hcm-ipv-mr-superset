@@ -504,7 +504,6 @@ R.Inventory = () => {
   return [
     `<div class="grid">${kpi("c3", "Stores and sites with at least one stock entry", fmt(sitesStock))}${VAX.map(p => kpi("c3", `${p} vials in hand — district store`, fmt(stockDays(p).inHand), `<div class="t">returned unopened on the latest day</div>`)).join("")}${kpi("c3", "Campaign day", `${day} <small style="font-size:14px;color:var(--muted)">of ${D.campaign_days}</small>`)}</div>`,
     prods().map(vrow).join(""),
-    `<div class="grid">${prods().map(p => `<div class="card c6"><div class="hb">${p}: ${fmt1(stockDays(p).days)} days of stock · Day ${day} of ${D.campaign_days}</div><p class="note">Vials in hand in the district store ÷ average daily vials opened (last 3 days). The red line in the chart below marks the ${left} campaign days remaining.</p></div>`).join("")}</div>`,
     `<div class="grid">${card("c6", "ivDos", "Days of stock left by site")}${card("c6", "ivWD", "Wastage % by district (allowed 5%)")}</div>`,
     `<div class="grid">${card("c12", "ivWS", "Wastage % by site (allowed 5%)")}</div>`,
     `<div class="grid">${prods().map(p => card("c6", `ivCum${p}`, `${p}: cumulative vials issued (net) vs vials needed, by site`, "Red bars: sites without enough vials to reach their target (vials needed = target ÷ doses per vial × 1.05)")).join("")}</div>`,
