@@ -23,6 +23,9 @@ DB_NAME = "HCM Elasticsearch (Trino)"
 DB_URI = "trino://admin@trino:8080/hcm"
 DASH_TITLE = "IPV + MR Integrated Campaign - Namibia 2026"
 SLUG = "hcm-ipv-mr-namibia"
+# Phone layout: Superset's grid can't reflow, so a second dashboard reuses the same charts in one column
+# (KPI cards two per row), with the filter bar along the top. Same charts, filters and data.
+MOBILE_SLUG, MOBILE_TITLE = "hcm-ipv-mr-namibia-mobile", "IPV + MR Campaign - Namibia 2026 (phone)"
 CHART_PREFIX = "[IPV-MR] "
 # Namibia only: no basemap. A transparent tile hides neighbouring countries; the
 # region / district polygons draw the country. Swap for OSM tiles if context is wanted:
@@ -80,7 +83,7 @@ def find(resource, col, value, opr="eq"):
 
 # ------------------------------------------------------------------ teardown
 def teardown():
-    for d in find("dashboard", "slug", SLUG):
+    for d in find("dashboard", "slug", SLUG) + find("dashboard", "slug", MOBILE_SLUG):
         api("DELETE", f"/api/v1/dashboard/{d['id']}")
     q = json.dumps({"filters": [{"col": "slice_name", "opr": "sw", "value": CHART_PREFIX}], "page_size": 500})
     for c in api("GET", f"/api/v1/chart/?q={q}")["result"]:
@@ -536,19 +539,35 @@ def build_charts(ds_ids):
           f"(+ {sum(1 for c in CHARTS if 'id' in c and not c['tab'])} map layers)")
 
 
-def position():
+def mobile_width(c):
+    return 6 if c["width"] <= 3 and "markdown" not in c else 12
+
+
+def position(mobile=False):
     pos = {"DASHBOARD_VERSION_KEY": "v2",
            "ROOT_ID": {"type": "ROOT", "id": "ROOT_ID", "children": ["TABS-main"]},
-           "HEADER_ID": {"id": "HEADER_ID", "type": "HEADER", "meta": {"text": DASH_TITLE}},
+           "HEADER_ID": {"id": "HEADER_ID", "type": "HEADER", "meta": {"text": MOBILE_TITLE if mobile else DASH_TITLE}},
            "TABS-main": {"type": "TABS", "id": "TABS-main", "children": [], "parents": ["ROOT_ID"]}}
     for t in TABS:
         tid = "TAB-" + re.sub(r"\W", "", t)
         pos["TABS-main"]["children"].append(tid)
         pos[tid] = {"type": "TAB", "id": tid, "children": [], "parents": ["ROOT_ID", "TABS-main"],
                     "meta": {"text": t, "defaultText": "Tab title", "placeholder": "Tab title"}}
-        rows = {}
+        rows, mrow, used = {}, 0, 12
         for i, c in enumerate(x for x in CHARTS if x["tab"] == t):
-            rid = f"ROW-{re.sub(chr(92) + 'W', '', t)}-{c['row']}"
+            width, height = c["width"], c["height"]
+            if mobile:   # one column; small KPI cards two per row; legends become short full-width notes
+                width = mobile_width(c)
+                if "markdown" in c:
+                    height = min(height, 26)
+                elif c.get("viz") == "big_number_total":
+                    height = max(height, 24)   # titles wrap on a phone; keep room for the number
+                if used + width > 12:
+                    mrow, used = mrow + 1, 0
+                used += width
+                rid = f"ROW-{re.sub(chr(92) + 'W', '', t)}-m{mrow}"
+            else:
+                rid = f"ROW-{re.sub(chr(92) + 'W', '', t)}-{c['row']}"
             if rid not in rows:
                 rows[rid] = {"type": "ROW", "id": rid, "children": [], "parents": ["ROOT_ID", "TABS-main", tid],
                              "meta": {"background": "BACKGROUND_TRANSPARENT"}}
@@ -557,12 +576,12 @@ def position():
             if "markdown" in c:
                 mid = f"MARKDOWN-{re.sub(chr(92) + 'W', '', t)}-{i}"
                 pos[mid] = {"type": "MARKDOWN", "id": mid, "children": [], "parents": parents,
-                            "meta": {"width": c["width"], "height": c["height"], "code": c["markdown"]}}
+                            "meta": {"width": width, "height": height, "code": c["markdown"]}}
                 rows[rid]["children"].append(mid)
             else:
                 cid = f"CHART-{c['id']}"
                 pos[cid] = {"type": "CHART", "id": cid, "children": [], "parents": parents,
-                            "meta": {"chartId": c["id"], "width": c["width"], "height": c["height"],
+                            "meta": {"chartId": c["id"], "width": width, "height": height,
                                      "sliceName": CHART_PREFIX + c["name"],
                                      "sliceNameOverride": c.get("title") or c["name"]}}
                 rows[rid]["children"].append(cid)
@@ -616,8 +635,23 @@ CSS = """
 """
 
 
-def build_dashboard(ds_ids, ds_cols):
-    pos = position()
+MOBILE_CSS = CSS + """
+/* phones: hide Superset's top menu on this dashboard and let the horizontal filter bar wrap */
+@media (max-width: 768px) {
+  header#main-menu { display: none !important; }
+  .dashboard-header-container .header-title, .dashboard-header-container .editable-title input { font-size: 16px !important; }
+  [data-test="filter-bar"] { flex-wrap: wrap !important; height: auto !important; }
+  [data-test="metadata-bar"] { display: none !important; }            /* owner / modified line: too wide for a phone */
+  .dashboard-component-chart-holder .header-controls .filter-counts { display: none !important; }
+  .dashboard-component-chart-holder [data-test="slice-header"] .header-title,
+  .dashboard-component-chart-holder [data-test="slice-header"] .editable-title a { white-space: normal !important;
+      overflow: visible !important; text-overflow: clip !important; font-size: 13px !important; line-height: 1.3 !important; }
+}
+"""
+
+
+def build_dashboard(ds_ids, ds_cols, mobile=False):
+    pos = position(mobile)
     on_dash = [c["id"] for c in CHARTS if "id" in c and c["tab"]]
     meta = {"native_filter_configuration": native_filters(ds_ids, ds_cols), "cross_filters_enabled": True,
             "refresh_frequency": 300, "color_scheme": "supersetColors",
@@ -627,13 +661,18 @@ def build_dashboard(ds_ids, ds_cols):
             "shared_label_colors": [], "timed_refresh_immune_slices": [], "expanded_slices": {},
             "chart_configuration": {}, "global_chart_configuration": {"scope": {"rootPath": ["ROOT_ID"], "excluded": []},
                                                                        "chartsInScope": on_dash}}
+    if mobile:
+        meta["filter_bar_orientation"] = "HORIZONTAL"
     res = api("POST", "/api/v1/dashboard/", json={
-        "dashboard_title": DASH_TITLE, "slug": SLUG, "published": True, "css": CSS,
+        "dashboard_title": MOBILE_TITLE if mobile else DASH_TITLE, "slug": MOBILE_SLUG if mobile else SLUG,
+        "published": True, "css": MOBILE_CSS if mobile else CSS,
         "position_json": json.dumps(pos), "json_metadata": json.dumps(meta)})
-    did = res["id"]
-    for cid in on_dash:
-        api("PUT", f"/api/v1/chart/{cid}", json={"dashboards": [did]})
-    return did
+    return res["id"]
+
+
+def attach_charts(dashboard_ids):
+    for cid in [c["id"] for c in CHARTS if "id" in c and c["tab"]]:
+        api("PUT", f"/api/v1/chart/{cid}", json={"dashboards": dashboard_ids})
 
 
 def main():
@@ -648,7 +687,10 @@ def main():
     define(remaining)
     build_charts(ds_ids)
     did = build_dashboard(ds_ids, ds_cols)
+    mid = build_dashboard(ds_ids, ds_cols, mobile=True)
+    attach_charts([did, mid])
     print(f"dashboard {did}: {BASE}/superset/dashboard/{SLUG}/")
+    print(f"phone dashboard {mid}: {BASE}/superset/dashboard/{MOBILE_SLUG}/")
 
 
 if __name__ == "__main__":

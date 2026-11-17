@@ -4,6 +4,8 @@ This is a live Superset 6.1 dashboard for the Namibia integrated campaign, `NAM-
 
 **Open:** http://localhost:8088/superset/dashboard/hcm-ipv-mr-namibia/ (local login `admin` / `admin`)
 
+**On a phone:** http://localhost:8088/superset/dashboard/hcm-ipv-mr-namibia-mobile/ is the same charts, filters and data in a one-column layout with the filters along the top (Superset's grid can't reflow, so the phone layout is a second dashboard built by `tools/build_superset.py`). The review page in `static/` is responsive on its own: on phones the filters fold behind a **Filters** button.
+
 **Static review page:** `static/` is a standalone page with the same tabs, filters and maps, built from a frozen export (`tools/export_static.py` → `static/data.json`, aggregates only). `static/data.json` is git-ignored because it holds field data. The public copy at https://hcm-ipv-mr-review.vercel.app is only updated on the project owner's say-so.
 
 ## Architecture
