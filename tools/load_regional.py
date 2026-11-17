@@ -4,8 +4,12 @@ Each workbook has the Zambezi layout without stock: Children (one row per child)
 Agg_IPV (one row per site x date: target, children vaccinated by age group). There is no stock,
 sync or gender data, and every Target cell is blank.
 
-Default is a DRY RUN: it reads and checks the workbooks and prints what would be loaded. Nothing is
-written. --load is blocked until the owner decides targets and the Ou-Nick overlap (see CLAUDE.md).
+Default is a DRY RUN: it reads and checks the workbooks and prints what would be loaded. --load writes
+them (run after tools/load_field_data.py, which recreates the indexes and dim_site).
+
+Targets: the workbooks' Target cells are blank, so each site-day gets the microplan's per-team daily
+target for its district: district target / number of teams / 11 campaign days (owner's instruction:
+targets from the microplan). Sites load with data_scope = 'coverage' (no Inventory or sync).
 
     tools/.venv/bin/python -I tools/load_regional.py                 # dry run, both workbooks
     tools/.venv/bin/python -I tools/load_regional.py path/to/X_region_MR_IPV_child_database.xlsx
@@ -20,6 +24,7 @@ What --load will write (same shapes as the Zambezi loader, so Overview and Cover
   dim_site            the sites from data/regional_sites.csv
 """
 import argparse
+import json
 import collections
 import csv
 import datetime as dt
@@ -29,7 +34,10 @@ from pathlib import Path
 import openpyxl
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from load_field_data import CAMPAIGN_START, day, sheet  # noqa: E402
+from load_field_data import (CAMPAIGN_START, CHILD_IDX, PG, SITE_IDX, bulk, day, es, sheet,  # noqa: E402
+                             synthetic_aefi, synthetic_gender, synthetic_zero_dose)
+
+CAMPAIGN_DAYS = 11
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT = [ROOT.parent / f"{r}_region_MR_IPV_child_database.xlsx" for r in ("Oshana", "Khomas")]
@@ -61,6 +69,8 @@ def read(path, sites):
                        total_vaccinated=a["Total_Vaccinated"], **ages)
             site_docs[f"{a['Site_Code']}|{d}|{v}"] = doc
             gap = (a["Total_Vaccinated"] or 0) - sum(x or 0 for x in ages.values())
+            if gap and v == "IPV":   # 5-10 year olds who got IPV: counted in the total, not in an age column
+                doc["vaccinated_5_10y"] = gap
             if gap:
                 issues.append(("WARN", f"{region}: {s['site_name']} {d} {v} total {a['Total_Vaccinated']} is {gap} more "
                                        f"than its age groups (IPV given to 5-10 year olds, outside the IPV age range)"))
@@ -110,6 +120,46 @@ def tally_overlap(site_docs):
     return out
 
 
+def per_team_targets(cur):
+    cur.execute("SELECT region, district, boundary_code, mr_target, ipv_target, teams_total FROM dim_district")
+    return {(r, d): {"code": c, "MR": mr / t / CAMPAIGN_DAYS, "IPV": ipv / t / CAMPAIGN_DAYS}
+            for r, d, c, mr, ipv, t in cur.fetchall() if t}
+
+
+def load(site_docs, children, sites):
+    import psycopg2
+    conn = psycopg2.connect(**PG)
+    cur = conn.cursor()
+    targets = per_team_targets(cur)
+    used = {s["site_code"] for s in sites.values() if s["include"] == "yes"}
+    # idempotent: drop anything previously loaded for these sites, then append
+    for idx in (SITE_IDX, CHILD_IDX):
+        es("POST", f"/{idx}/_delete_by_query?refresh=true",
+           json.dumps({"query": {"terms": {"site_code": sorted(used)}}}))
+    for doc in site_docs.values():
+        s = sites[doc["site_code"]]
+        doc["target"] = round(targets[(s["region"], s["district"])][doc["vaccine"]])
+    bulk(SITE_IDX, list(site_docs.items()))
+    child_docs = []
+    for c in children:
+        d = str(c["Date"])[:10]
+        child_docs.append((c["Child_ID"], dict(
+            child_id=c["Child_ID"], event_date=d, campaign_day=day(d), source_campaign_day=c["Campaign_Day"],
+            site_code=c["Site_Code"], site_name=sites[c["Site_Code"]]["site_name"], cluster=c["Cluster"],
+            age_group=c["Age_Group"], ipv=c["IPV"], mr=c["MR"], ipv_eligible=c["IPV_Eligible"],
+            vaccine_status=c["Vaccine_Status"], gender=c.get("Gender") or synthetic_gender(c["Child_ID"]),
+            gender_synthetic=0 if c.get("Gender") else 1, zero_dose=synthetic_zero_dose(c), zero_dose_synthetic=1,
+            aefi=synthetic_aefi(c), aefi_synthetic=1)))
+    bulk(CHILD_IDX, child_docs)
+    cur.execute("DELETE FROM dim_site WHERE site_code = ANY(%s)", (sorted(used),))
+    cur.executemany("INSERT INTO dim_site VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                    [(s["site_code"], s["site_name"], s["facility_type"], None, s["region"], s["district"],
+                      targets[(s["region"], s["district"])]["code"], float(s["latitude"]), float(s["longitude"]),
+                      s["coord_source"], "coverage") for s in sites.values() if s["include"] == "yes"])
+    conn.commit()
+    print(f"Loaded {len(site_docs)} site-day docs, {len(child_docs)} children, {len(used)} sites (coverage only).")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("workbooks", nargs="*", default=[str(p) for p in DEFAULT])
@@ -147,8 +197,7 @@ def main():
     print(f"\nWould write: {len(all_children)} children to field-child-v1, {len(all_docs)} docs to field-site-day-v1, "
           f"{sum(1 for s in sites.values() if s['include'] == 'yes')} rows to dim_site.")
     if a.load:
-        raise SystemExit("--load is not enabled yet: the owner asked to prepare these workbooks without ingesting them. "
-                         "See CLAUDE.md, 'Regional child databases (prepared, not loaded)'.")
+        load(all_docs, all_children, sites)
 
 
 if __name__ == "__main__":

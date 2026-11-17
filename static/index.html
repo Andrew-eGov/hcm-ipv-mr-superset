@@ -241,13 +241,19 @@ const vac = rs => sum(rs, r => r.vac), tgt = rs => sum(rs, r => r.target);
 const cov = rs => vac(rs) / tgt(rs);
 const dosesOpened = rs => sum(rs, r => r.opened * r.dpv);
 const MR_WASTAGE_REPORTED = 0.001;   // owner's instruction: MR shows the reported 0.1%; IPV is calculated, never below 0%
-const waste = rs => { if (rs.length && rs.every(r => r.p === "MR")) return MR_WASTAGE_REPORTED; const d = dosesOpened(rs); return d ? Math.max(0, (d - vac(rs)) / d) : NaN; };
+const waste = rs0 => { const rs = rs0.filter(r => r.opened != null);   // only site-days with vial data
+  if (!rs.length) return NaN;
+  if (rs.length && rs.every(r => r.p === "MR")) return MR_WASTAGE_REPORTED; const d = dosesOpened(rs); return d ? Math.max(0, (d - vac(rs)) / d) : NaN; };
 const net = r => (r.rec || 0) + (r.add || 0) - (r.ret || 0);
 const need = r => r.target / r.dpv * (1 + WASTE_OK);
 const unbalanced = r => (r.rec || 0) + (r.add || 0) - (r.opened || 0) - (r.ret || 0);
 function lastDate() { return D.site_day.reduce((m, r) => r.d > m ? r.d : m, ""); }
-function stockDays(p, rs = rows(p, { allDates: true })) {   // vials in hand (returned on latest day) / avg daily opened (last 3 days)
-  const last = lastDate(), win = uniq(D.site_day.map(r => r.d)).filter(d => (new Date(last) - new Date(d)) / 864e5 < 3);
+// Sites with stock data (Zambezi field database). Coverage-only regions (Oshana, Khomas) stay out of Inventory.
+const isStockSite = s => s.scope === "full";
+const stockRows = (p, opts) => rows(p, opts).filter(r => isStockSite(S(r.code)));
+const stockLastDate = () => D.site_day.filter(r => isStockSite(S(r.code))).reduce((m, r) => r.d > m ? r.d : m, "");
+function stockDays(p, rs = stockRows(p, { allDates: true })) {   // vials in hand (returned on latest day) / avg daily opened (last 3 days)
+  const last = stockLastDate(), win = uniq(D.site_day.filter(r => isStockSite(S(r.code))).map(r => r.d)).filter(d => (new Date(last) - new Date(d)) / 864e5 < 3);
   const inHand = sum(rs.filter(r => r.d === last), r => r.ret), daily = sum(rs.filter(r => win.includes(r.d)), r => r.opened) / win.length;
   return { inHand, daily, days: inHand / daily };
 }
@@ -456,11 +462,11 @@ function facilityMap(id) {
   document.getElementById(id + "-lg").innerHTML = Object.keys(FTYPES).map(t => `<span>${siteIcon(t).options.html} ${t}</span>`).join("") +
     `<span>Type from the site name in the field database; Homba Clinic and Nchichimani have no coordinates and sit at their district centre.</span>`;
 }
-function statusMap(id, statusOf, colors, tip) {
+function statusMap(id, statusOf, colors, tip, only = () => true) {
   const m = mapInit(id);
   L.geoJSON(D.geo_districts, { style: { fill: false, color: css("--axis"), weight: 1 }, interactive: false }).addTo(m);
   const pts = [];
-  D.sites.filter(s => siteOk(s)).forEach(s => {
+  D.sites.filter(s => siteOk(s) && only(s)).forEach(s => {
     const st = statusOf(s);
     L.circleMarker([s.lat, s.lon], { radius: 7, color: css("--card"), weight: 1.5, fillColor: css(colors[st]), fillOpacity: .95 }).bindTooltip(tip(s, st)).addTo(m);
     pts.push([s.lat, s.lon]);
@@ -539,7 +545,7 @@ R.Coverage = () => [
 R.Inventory = () => {
   const last = lastDate(), day = dayNo(last), left = D.campaign_days - day;
   const sitesStock = uniq(D.site_day.filter(r => siteOk(S(r.code)) && r.rec != null).map(r => r.code)).length;
-  const vrow = p => { const rs = rows(p); return `<div class="grid">${[
+  const vrow = p => { const rs = stockRows(p); return `<div class="grid">${[
     kpi("c2", `${p}: vials received`, fmt(sum(rs, r => r.rec))), kpi("c2", `${p}: additional vials received`, fmt(sum(rs, r => r.add))),
     kpi("c2", `${p}: vials opened`, fmt(sum(rs, r => r.opened))), kpi("c2", `${p}: vials returned unopened`, fmt(sum(rs, r => r.ret))),
     kpi("c2", `${p}: vials issued (net)`, fmt(sum(rs, net))), kpi("c2", `${p}: wastage % (allowed 5%)`, pct(waste(rs), 1), (p === "MR" ? `<div class="t">reported figure</div>` : "") + wstatus(waste(rs))),
@@ -555,31 +561,31 @@ R.Inventory = () => {
     `<div class="grid">${prods().map(p => card("c6", `ivMap${p}`, `Map: sites by cumulative stock against need (${p})`, "", "map")).join("")}</div>`,
     `<div class="grid">${card("c12", "ivTbl", "Stock by site and campaign day", "", "table")}</div>`,
     () => {
-      const ss = D.sites.filter(s => siteOk(s)).map(s => s.code);
+      const ss = D.sites.filter(s => siteOk(s) && isStockSite(s)).map(s => s.code);
       const dos = ss.map(c => ({ c, v: Object.fromEntries(prods().map(p => [p, stockDays(p, D.site_day.filter(r => r.code === c && r.p === p)).days])) }))
         .sort((a, b) => (a.v[prods()[0]] || 0) - (b.v[prods()[0]] || 0));
       draw("ivDos", { xAxis: axisCat(dos.map(x => S(x.c).name), 40), yAxis: axisVal(v => fmt1(v)),
         series: prods().map((p, i) => barS(p, dos.map(x => isFinite(x.v[p]) ? +x.v[p].toFixed(1) : 0), VCOL[p], i ? {} : { markLine: refLine(left, `Campaign days remaining (${left})`) })) });
-      const wd = uniq(D.sites.filter(s => siteOk(s)).map(s => s.district));
+      const wd = uniq(D.sites.filter(s => siteOk(s) && isStockSite(s)).map(s => s.district));
       draw("ivWD", { tooltip: Object.assign(base().tooltip, pctTip), xAxis: axisCat(wd), yAxis: axisVal(v => pct(v)),
-        series: prods().map((p, i) => barS(p, wd.map(d => +waste(rows(p).filter(r => S(r.code).district === d)).toFixed(4)), VCOL[p],
+        series: prods().map((p, i) => barS(p, wd.map(d => +waste(stockRows(p).filter(r => S(r.code).district === d)).toFixed(4)), VCOL[p],
           Object.assign({ label: { show: true, position: "top", formatter: x => pct(x.value, 1), color: css("--ink-2") } }, i ? {} : { markLine: refLine(WASTE_OK, "Allowed 5%") }))) });
-      const sn = D.sites.filter(s => siteOk(s));
+      const sn = D.sites.filter(s => siteOk(s) && isStockSite(s));
       draw("ivWS", { tooltip: Object.assign(base().tooltip, pctTip), xAxis: axisCat(sn.map(s => s.name), 40), yAxis: axisVal(v => pct(v)),
-        series: prods().map((p, i) => barS(p, sn.map(s => +waste(rows(p).filter(r => r.code === s.code)).toFixed(4) || 0), VCOL[p], i ? {} : { markLine: refLine(WASTE_OK, "Allowed 5%") })) });
+        series: prods().map((p, i) => barS(p, sn.map(s => +waste(stockRows(p).filter(r => r.code === s.code)).toFixed(4) || 0), VCOL[p], i ? {} : { markLine: refLine(WASTE_OK, "Allowed 5%") })) });
       prods().forEach(p => {
-        const g = sn.map(s => { const rs = rows(p).filter(r => r.code === s.code); return { n: s.name, iss: sum(rs, net), nd: +sum(rs, need).toFixed(1) }; }).sort((a, b) => b.nd - a.nd);
+        const g = sn.map(s => { const rs = stockRows(p).filter(r => r.code === s.code); return { n: s.name, iss: sum(rs, net), nd: +sum(rs, need).toFixed(1) }; }).sort((a, b) => b.nd - a.nd);
         draw(`ivCum${p}`, { xAxis: axisCat(g.map(x => x.n), 40), yAxis: axisVal(),
           series: [barS("Vials issued (net)", g.map(x => ({ value: x.iss, itemStyle: { color: css(x.iss < x.nd ? "--critical" : VCOL[p]) } })), VCOL[p]),
                    barS("Vials needed", g.map(x => x.nd), "--axis")] });
       });
-      const ct = []; sn.forEach(s => prods().forEach(p => { const rs = rows(p).filter(r => r.code === s.code); if (rs.length) ct.push({ district: s.district, name: s.name, p, iss: sum(rs, net), nd: sum(rs, need), t: tgt(rs) }); }));
+      const ct = []; sn.forEach(s => prods().forEach(p => { const rs = stockRows(p).filter(r => r.code === s.code); if (rs.length) ct.push({ district: s.district, name: s.name, p, iss: sum(rs, net), nd: sum(rs, need), t: tgt(rs) }); }));
       table("ivCumT", [{ h: "District", l: 1, k: "district" }, { h: "Site", l: 1, k: "name" }, { h: "Vaccine", l: 1, k: "p" }, { h: "Vials issued (net)", f: r => fmt(r.iss) },
         { h: "Vials needed", f: r => fmt1(r.nd) }, { h: "Vials short (-) or spare (+)", f: r => fmt1(r.iss - r.nd), bg: r => redIf(r.iss < r.nd) }, { h: "Target", f: r => fmt(r.t) }],
         ct.sort((a, b) => (a.iss - a.nd) - (b.iss - b.nd)));
       const links = {};
       const add = (s, t, v) => { if (v > 0) links[s + "→" + t] = (links[s + "→" + t] || 0) + v; };
-      rows(null).forEach(r => { const s = S(r.code), p = r.p, inflow = (r.rec || 0) + (r.add || 0);
+      stockRows(null).forEach(r => { const s = S(r.code), p = r.p, inflow = (r.rec || 0) + (r.add || 0);
         add(`${p} · National store`, `${p} · ${s.region} regional store`, inflow); add(`${p} · ${s.region} regional store`, `${p} · ${s.district} district store`, inflow);
         add(`${p} · ${s.district} district store`, `${p} · ${s.name}`, inflow); add(`${p} · ${s.name}`, `${p} · Vials opened`, r.opened);
         add(`${p} · ${s.name}`, `${p} · Vials returned unopened`, r.ret); add(`${p} · ${s.name}`, `${p} · Not accounted for`, Math.max(0, unbalanced(r))); });
@@ -595,12 +601,12 @@ R.Inventory = () => {
           return `<b>${esc(s.name)}</b><br>${p}: ${st}` + (rs.length ? `<br>Vials received (incl. additional): <b>${fmt(sum(rs, r => (r.rec || 0) + (r.add || 0)))}</b>` +
             `<br>Vials left over (returned unopened): <b>${fmt(sum(rs, r => r.ret))}</b><br>Vials used (issued net): <b>${fmt(iss)}</b>` +
             `<br>Vials needed for target: <b>${fmt1(nd)}</b><br>Vials ${gap < 0 ? "short" : "spare"}: <b>${fmt1(Math.abs(gap))}</b>` : "");
-        }));
+        }, isStockSite));
       table("ivTbl", [{ h: "Date", l: 1, f: r => dlabel(r.d) }, { h: "District", l: 1, f: r => esc(S(r.code).district) }, { h: "Site", l: 1, f: r => esc(S(r.code).name) }, { h: "Vaccine", l: 1, k: "p" },
         { h: "Vials received", f: r => fmt(r.rec) }, { h: "Additional vials received", f: r => fmt(r.add) }, { h: "Vials opened", f: r => fmt(r.opened) },
         { h: "Vials returned unopened", f: r => fmt(r.ret) }, { h: "Vials issued (net)", f: r => fmt(net(r)) }, { h: "Children vaccinated", f: r => fmt(r.vac) },
         { h: "Wastage", f: r => pct(waste([r]), 1), bg: r => redIf(waste([r]) > WASTE_OK) }],
-        rows(null).slice().sort((a, b) => a.d.localeCompare(b.d) || S(a.code).district.localeCompare(S(b.code).district) || b.opened - a.opened));
+        stockRows(null).slice().sort((a, b) => a.d.localeCompare(b.d) || S(a.code).district.localeCompare(S(b.code).district) || b.opened - a.opened));
     },
   ];
 };
@@ -771,7 +777,7 @@ function wireTheme() {
   };
 }
 async function start() {
-  D = await fetch("data.json").then(r => r.json());
+  D = await fetch("data.json", { cache: "no-cache" }).then(r => r.json());   // always revalidate: the snapshot changes on each deploy
   D.smap = Object.fromEntries(D.sites.map(s => [s.code, s]));
   document.getElementById("tabs").innerHTML = TABS.map(t => `<button data-t="${t}">${t}</button>`).join("");
   document.getElementById("tabs").onclick = e => { if (e.target.dataset.t) { active = e.target.dataset.t; render(); } };

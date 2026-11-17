@@ -66,6 +66,13 @@ tools/.venv/bin/python -I tools/load_microplan.py
 if (( FIELD )); then
   step "Field database (Zambezi child and stock workbook) -> Elasticsearch, sites -> Postgres"
   tools/.venv/bin/python -I tools/load_field_data.py
+  # Coverage-only regional child databases (Oshana, Khomas), when present next to the repo
+  regional=()
+  for r in Oshana Khomas; do f="$(cd .. && pwd)/${r}_region_MR_IPV_child_database.xlsx"; [[ -f "$f" ]] && regional+=("$f"); done
+  if (( ${#regional[@]} )); then
+    step "Regional child databases (coverage only) -> Elasticsearch"
+    tools/.venv/bin/python -I tools/load_regional.py --load "${regional[@]}" | tail -1
+  fi
 else
   step "Sites -> Postgres"
   tools/.venv/bin/python -I tools/load_field_data.py --sites-only

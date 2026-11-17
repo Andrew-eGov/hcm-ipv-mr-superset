@@ -339,8 +339,9 @@ COVERAGE = M(PCT("SUM(vaccinated)", "SUM(target)"), "Coverage of target")
 # Wastage (owner's instructions): MR shows the reported figure, 0.1%; IPV is calculated from the field data
 # and never shows below 0% (more children than doses in opened vials counts as 0%).
 MR_WASTAGE_REPORTED = 0.001
-WASTAGE = M(f"CASE WHEN MIN(product) = 'MR' AND MAX(product) = 'MR' THEN {MR_WASTAGE_REPORTED} "
-            f"ELSE GREATEST(CAST(0 AS double), {PCT('SUM(doses_opened) - SUM(vaccinated)', 'SUM(doses_opened)')}) END", "Wastage")
+WASTAGE = M(f"CASE WHEN SUM(vials_opened) IS NULL THEN NULL "   # no vial data (coverage-only regions): no wastage
+            f"WHEN MIN(product) = 'MR' AND MAX(product) = 'MR' THEN {MR_WASTAGE_REPORTED} "
+            f"ELSE GREATEST(CAST(0 AS double), {PCT('SUM(doses_opened) - SUM(CASE WHEN doses_opened IS NOT NULL THEN vaccinated END)', 'SUM(doses_opened)')}) END", "Wastage")
 
 BANNER = """<div style="padding:4px 2px;font-family:Inter,Roboto,sans-serif;line-height:1.5">
 <span style="font-size:13px;opacity:.8">Namibia · NAM-09-01-IPV-MR_NID · Round 1 · 9-19 Nov 2026 (11 days)</span><br/>
@@ -392,7 +393,7 @@ def define(days_remaining):
     # Map 2: zero-dose children (synthetic) by district, with the numbers in the tooltip
     choropleth(T, "0m", 6, "Coverage map: zero-dose children by district", "field_district_map",
                M("MAX(zero_dose_children)", "Zero-dose children"), tooltip=("district", "zero_dose_children", "zero_dose_pct"),
-               scheme="oranges", breaks=["0", "25", "50", "75", "100", "150"], viewport=ZAMBEZI)
+               scheme="oranges", breaks=["0", "25", "50", "75", "100", "150"])
     for v in ("MR", "IPV"):
         col = f"{v.lower()}_coverage_pct"
         choropleth(T, 1, 6, f"Coverage map: {v} coverage % by region", "field_region_map", M(f"MAX({col})", f"{v} coverage %"))
@@ -435,7 +436,7 @@ def define(days_remaining):
 
     # ---------------- Inventory
     T = "Inventory"
-    big(T, 1, 3, "Inventory: stores and sites with a stock entry", "field_site_day",
+    big(T, 1, 3, "Inventory: stores and sites with a stock entry", "field_stock_site_day",
         M("COUNT(DISTINCT CASE WHEN vials_received IS NOT NULL THEN site_code END)", "Sites"),
         "Stores and sites with at least one stock entry", ",d", [TIME_F()])
     for v, f in VACCINES:
@@ -445,31 +446,31 @@ def define(days_remaining):
         f"Campaign day (of {CAMPAIGN_DAYS})", ",d")
     for v, f in VACCINES:
         r = f"2{v}"
-        big(T, r, 2, f"Inventory: {v} vials received", "field_site_day", M("SUM(vials_received)", "Vials"),
+        big(T, r, 2, f"Inventory: {v} vials received", "field_stock_site_day", M("SUM(vials_received)", "Vials"),
             f"{v}: vials received", ",d", f + [TIME_F()])
-        big(T, r, 2, f"Inventory: {v} additional vials received", "field_site_day", M("SUM(additional_vials_received)", "Vials"),
+        big(T, r, 2, f"Inventory: {v} additional vials received", "field_stock_site_day", M("SUM(additional_vials_received)", "Vials"),
             f"{v}: additional vials received", ",d", f + [TIME_F()])
-        big(T, r, 2, f"Inventory: {v} vials opened", "field_site_day", M("SUM(vials_opened)", "Vials"),
+        big(T, r, 2, f"Inventory: {v} vials opened", "field_stock_site_day", M("SUM(vials_opened)", "Vials"),
             f"{v}: vials opened", ",d", f + [TIME_F()])
-        big(T, r, 2, f"Inventory: {v} vials returned unopened", "field_site_day", M("SUM(vials_returned_unopened)", "Vials"),
+        big(T, r, 2, f"Inventory: {v} vials returned unopened", "field_stock_site_day", M("SUM(vials_returned_unopened)", "Vials"),
             f"{v}: vials returned unopened", ",d", f + [TIME_F()])
-        big(T, r, 2, f"Inventory: {v} vials issued (net)", "field_site_day", M("SUM(vials_issued_net)", "Vials"),
+        big(T, r, 2, f"Inventory: {v} vials issued (net)", "field_stock_site_day", M("SUM(vials_issued_net)", "Vials"),
             f"{v}: vials issued (net)", ",d", f + [TIME_F()])
-        big(T, r, 2, f"Inventory: {v} wastage", "field_site_day", WASTAGE, f"{v}: wastage % (allowed 5%)", ".1%",
+        big(T, r, 2, f"Inventory: {v} wastage", "field_stock_site_day", WASTAGE, f"{v}: wastage % (allowed 5%)", ".1%",
             f + [TIME_F()], note="reported figure" if v == "MR" else "")
     bar(T, 4, 6, "Inventory: days of stock left by site", "field_stock_days", "site_name",
         [M("SUM(vials_in_hand) / NULLIF(SUM(daily_vials_opened), 0)", "Days of stock")], ["product_label"], fmt=",.1f",
         sort_by_metric=False, x_axis_sort="Days of stock", x_axis_sort_asc=True,
         lines=[LINE_AT(days_remaining, f"Campaign days remaining ({days_remaining})")], values=False)
-    bar(T, 4, 6, "Inventory: wastage % by district (allowed 5%)", "field_site_day", "district", [WASTAGE],
+    bar(T, 4, 6, "Inventory: wastage % by district (allowed 5%)", "field_stock_site_day", "district", [WASTAGE],
         ["product_label"], fmt=".1%", filters=[TIME_F()], lines=[LINE_AT(0.05, "Allowed 5%")])
-    bar(T, 5, 12, "Inventory: wastage % by site (allowed 5%)", "field_site_day", "site_name", [WASTAGE],
+    bar(T, 5, 12, "Inventory: wastage % by site (allowed 5%)", "field_stock_site_day", "site_name", [WASTAGE],
         ["product_label"], fmt=".1%", filters=[TIME_F()], lines=[LINE_AT(0.05, "Allowed 5%")], height=50, values=False)
     for v, f in VACCINES:
-        bar(T, 6, 6, f"Inventory: {v} cumulative vials issued (net) vs vials needed, by site", "field_site_day", "site_name",
+        bar(T, 6, 6, f"Inventory: {v} cumulative vials issued (net) vs vials needed, by site", "field_stock_site_day", "site_name",
             [M("SUM(vials_issued_net)", "Vials issued (net)"), M("ROUND(SUM(vials_needed), 1)", "Vials needed")],
             filters=f + [TIME_F()], sort_by_metric=True, values=False)
-    table(T, 7, 12, "Inventory: cumulative stock by facility (red = not enough vials for target)", "field_site_day",
+    table(T, 7, 12, "Inventory: cumulative stock by facility (red = not enough vials for target)", "field_stock_site_day",
           ["district", "site_name", "product_label"],
           [M("SUM(vials_issued_net)", "Vials issued (net)"), M("ROUND(SUM(vials_needed), 1)", "Vials needed"),
            M("ROUND(SUM(vials_issued_net) - SUM(vials_needed), 1)", "Vials short (-) or spare (+)"), M("SUM(target)", "Target")],
@@ -484,9 +485,10 @@ def define(days_remaining):
                   f"{v.lower()}_stock_status", STATUS_COLOURS,
                   ("Site", f"{v} status", f"{v} vials received (incl. additional)", f"{v} vials left over (returned unopened)",
                    f"{v} vials used (issued net)", f"{v} vials needed for target", f"{v} vials short (-) or spare (+)"),
+                  filters=[F("data_scope", "IN", ["full"])],
                   legend_title=f"{v}: vials issued (net) vs needed",
                   note="Vials needed = target ÷ doses per vial × 1.05, summed over all campaign days with data.")
-    table(T, 10, 12, "Inventory: stock by site and campaign day", "field_site_day",
+    table(T, 10, 12, "Inventory: stock by site and campaign day", "field_stock_site_day",
           ["event_date", "district", "site_name", "product_label"],
           [M("SUM(vials_received)", "Vials received"), M("SUM(additional_vials_received)", "Additional vials received"),
            M("SUM(vials_opened)", "Vials opened"), M("SUM(vials_returned_unopened)", "Vials returned unopened"),

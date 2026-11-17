@@ -1,6 +1,6 @@
 # HCM IPV + MR Campaign Dashboard (Superset)
 
-This is a live Superset 6.1 dashboard for the Namibia integrated campaign, `NAM-09-01-IPV-MR_NID` (single round, 9–19 Nov 2026, delivering measles-rubella (MR) and IPV). It currently shows the **Zambezi region MR/IPV child and stock database** (field data for 10–11 Nov: Katima Mulilo, Bukalo and Sangwali districts, 23 sites), loaded into Elasticsearch.
+This is a live Superset 6.1 dashboard for the Namibia integrated campaign, `NAM-09-01-IPV-MR_NID` (single round, 9–19 Nov 2026, delivering measles-rubella (MR) and IPV). It currently shows the **Zambezi region MR/IPV child and stock database** (10–11 Nov: Katima Mulilo, Bukalo and Sangwali districts, 23 sites; coverage, stock and sync) plus the **Oshana (Oshakati) and Khomas (Windhoek) child databases** (12–13 Nov, 7 sites; coverage only, daily targets from the microplan: district target ÷ teams ÷ 11 days).
 
 **Open:** http://localhost:8088/superset/dashboard/hcm-ipv-mr-namibia/ (local login `admin` / `admin`)
 

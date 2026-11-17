@@ -20,7 +20,7 @@ CAMPAIGN_START = "DATE '2026-11-09'"
 CAMPAIGN_DAYS = 11
 WASTAGE_ALLOWED = 0.05
 
-DIMS = "s.region, s.district, s.boundary_code, s.site_code, s.site_name, s.facility_type"
+DIMS = "s.region, s.district, s.boundary_code, s.site_code, s.site_name, s.facility_type, s.data_scope"
 
 
 def site_day_base():
@@ -34,15 +34,25 @@ SELECT {DIMS}, s.latitude, s.longitude,
        CAST(f.additional_vials_received AS double) AS additional_vials_received,
        CAST(f.vials_opened AS double) AS vials_opened,
        CAST(f.vials_returned_unopened AS double) AS vials_returned_unopened,
-       CAST(coalesce(f.vials_received, 0) + coalesce(f.additional_vials_received, 0) - coalesce(f.vials_returned_unopened, 0) AS double) AS vials_issued_net,
+       CASE WHEN f.vials_received IS NOT NULL THEN CAST(coalesce(f.vials_received, 0) + coalesce(f.additional_vials_received, 0) - coalesce(f.vials_returned_unopened, 0) AS double) END AS vials_issued_net,
        CAST(p.doses_per_unit AS double) AS doses_per_vial,
        CAST(f.vials_opened * p.doses_per_unit AS double) AS doses_opened,
-       f.target / CAST(p.doses_per_unit AS double) * (1 + p.planned_wastage_pct / 100.0) AS vials_needed,
-       CAST(coalesce(f.vials_received, 0) + coalesce(f.additional_vials_received, 0) - coalesce(f.vials_opened, 0) - coalesce(f.vials_returned_unopened, 0) AS double) AS stock_unbalanced_vials,
+       CASE WHEN f.vials_received IS NOT NULL THEN f.target / CAST(p.doses_per_unit AS double) * (1 + p.planned_wastage_pct / 100.0) END AS vials_needed,
+       CASE WHEN f.vials_received IS NOT NULL THEN CAST(coalesce(f.vials_received, 0) + coalesce(f.additional_vials_received, 0) - coalesce(f.vials_opened, 0) - coalesce(f.vials_returned_unopened, 0) AS double) END AS stock_unbalanced_vials,
        f.vaccinated_6_11m, f.vaccinated_14w_11m, f.vaccinated_12_59m, f.vaccinated_5_10y
 FROM {SITE_DAY} f
 JOIN {MP}.dim_site s ON s.site_code = f.site_code
 JOIN {MP}.dim_product p ON p.product_code = f.vaccine"""
+
+
+def stock_site_day():
+    """Site-days with stock data only ('full' sites); coverage-only regions have no vials."""
+    return f"SELECT * FROM ({site_day_base()}) x WHERE x.data_scope = 'full'"
+
+
+def ds_stock_site_day():
+    """Inventory: one row per site x date x vaccine, only sites that report stock (the Zambezi field database)."""
+    return stock_site_day()
 
 
 def ds_site_day():
@@ -178,7 +188,7 @@ def ds_stock_flow():
     Store layers are not in the field database: they are the sums of the site layer."""
     return f"""
 SELECT b.region, b.district, b.site_name, b.product, b.event_date, l.source, l.target, l.vials
-FROM ({site_day_base()}) b
+FROM ({stock_site_day()}) b
 CROSS JOIN UNNEST(
   ARRAY[b.product || ' · National store', b.product || ' · ' || b.region || ' regional store',
         b.product || ' · ' || b.district || ' district store',
@@ -196,7 +206,7 @@ def ds_stock_days():
     """Per site and vaccine: vials returned unopened on the latest day (now in the district store) and
     average daily vials opened over the last 3 campaign days with data. Days of stock = in hand / daily use."""
     return f"""
-WITH b AS ({site_day_base()}),
+WITH b AS ({stock_site_day()}),
  g AS (SELECT max(event_date) AS last_date FROM b),
  w AS (SELECT count(DISTINCT event_date) AS n FROM b, g WHERE b.event_date > date_add('day', -3, g.last_date))
 SELECT b.region, b.district, b.site_name, b.product, b.product_label,
@@ -223,16 +233,17 @@ def ds_sync():
     return f"""
 SELECT u.region, y.district, 'Frontline workers' AS user_group, u.user_id AS entity_id, y.synced, y.synthetic
 FROM {SYNC} y JOIN {MP}.dim_user u ON u.user_id = y.user_id
-WHERE y.district IN (SELECT DISTINCT district FROM {MP}.dim_site)
+WHERE y.district IN (SELECT DISTINCT district FROM {MP}.dim_site WHERE data_scope = 'full')
 UNION ALL
 SELECT u.region, y.district, 'Vaccinators downsynced', u.user_id, y.downsynced, y.synthetic
 FROM {SYNC} y JOIN {MP}.dim_user u ON u.user_id = y.user_id
-WHERE y.role_group = 'VACCINATOR' AND y.district IN (SELECT DISTINCT district FROM {MP}.dim_site)"""
+WHERE y.role_group = 'VACCINATOR' AND y.district IN (SELECT DISTINCT district FROM {MP}.dim_site WHERE data_scope = 'full')"""
 
 
 DATASETS = {
     # name: (function, temporal column or None)
     "field_site_day": (ds_site_day, "event_date"),
+    "field_stock_site_day": (ds_stock_site_day, "event_date"),
     "field_progress_pie": (ds_progress_pie, "event_date"),
     "field_coverage_long": (ds_coverage_long, "event_date"),
     "field_age": (ds_age, "event_date"),

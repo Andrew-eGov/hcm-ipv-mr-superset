@@ -55,7 +55,8 @@ def main():
     out = {"generated": dt.datetime.utcnow().isoformat(timespec="seconds") + "Z", "campaign_days": DS.CAMPAIGN_DAYS,
            "campaign_start": "2026-11-09"}
     out["sites"] = ds(DS.ds_sites, "site_code AS code, site_name AS name, region, district, boundary_code AS bcode, "
-                      "facility_type AS type, team_note AS team, latitude AS lat, longitude AS lon, coord_source AS src")
+                      "facility_type AS type, team_note AS team, latitude AS lat, longitude AS lon, coord_source AS src, "
+                      "data_scope AS scope")
     out["site_day"] = ds(DS.ds_site_day, "site_code AS code, product AS p, event_date AS d, target, vaccinated AS vac, "
                          "vials_received AS rec, additional_vials_received AS add, vials_opened AS opened, "
                          "vials_returned_unopened AS ret, doses_per_vial AS dpv, source_campaign_day AS src_day")

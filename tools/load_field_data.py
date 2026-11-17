@@ -140,6 +140,17 @@ def es(method, path, body=None, ndjson=False):
     return json.loads(out or b"{}")
 
 
+def bulk(index, docs):
+    """Index (id, doc) pairs into an existing index."""
+    for i in range(0, len(docs), 5000):
+        lines = []
+        for _id, d in docs[i:i + 5000]:
+            lines += [json.dumps({"index": {"_index": index, "_id": _id}}), json.dumps(d)]
+        res = es("POST", "/_bulk?refresh=wait_for", "\n".join(lines) + "\n", ndjson=True)
+        if res.get("errors"):
+            raise RuntimeError(next(x for x in res["items"] if x["index"].get("error")))
+
+
 def recreate(index, fields, docs):
     es("DELETE", f"/{index}")
     es("PUT", f"/{index}", json.dumps({"settings": {"number_of_replicas": 0},
@@ -208,11 +219,13 @@ def load_sites():
     cur.execute("""DROP TABLE IF EXISTS dim_site;
         CREATE TABLE dim_site (site_code text PRIMARY KEY, site_name text, facility_type text,
           team_note text, region text, district text, boundary_code text,
-          latitude double precision, longitude double precision, coord_source text)""")
-    cur.executemany("INSERT INTO dim_site VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+          latitude double precision, longitude double precision, coord_source text, data_scope text)""")
+    # data_scope: 'full' = coverage + stock + sync (Zambezi field database); 'coverage' = coverage only
+    # (regional child databases, tools/load_regional.py) - kept out of Inventory and sync charts
+    cur.executemany("INSERT INTO dim_site VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
                     [(s["site_code"], s["site_name"], s["facility_type"], s["team_note"] or None,
                       REGION, s["district"], codes[s["district"]], float(s["latitude"]), float(s["longitude"]),
-                      s["coord_source"]) for s in sites])
+                      s["coord_source"], "full") for s in sites])
     conn.commit()
     return sites
 
