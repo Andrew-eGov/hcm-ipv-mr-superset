@@ -291,11 +291,14 @@ function draw(id, opt) {
   charts[id].setOption(Object.assign(base(), opt));
 }
 const pctTip = { valueFormatter: v => v == null ? "–" : (v * 100).toFixed(1) + "%" };
-function covBars(id, keyOf, rotate = 0, sort = true) {   // MR and IPV side by side, coverage of target
+function covBars(id, keyOf, rotate = 0, sort = true) {   // MR and IPV side by side; % on the bars, absolute numbers on hover
   const g = groupCov(keyOf), keys = Object.keys(g);
   if (sort) keys.sort((a, b) => cov(g[b]) - cov(g[a]));
-  draw(id, { tooltip: Object.assign(base().tooltip, pctTip), xAxis: axisCat(keys, rotate), yAxis: axisVal(v => pct(v)),
-    series: prods().map(p => barS(p, keys.map(k => +cov(g[k].filter(r => r.p === p)).toFixed(4) || null), VCOL[p],
+  const tip = Object.assign(base().tooltip, { formatter: ps => `<b>${esc(ps[0].axisValue)}</b>` + ps.map(x => { const d = x.data || {};
+    return `<br>${x.marker}${x.seriesName}: <b>${pct(d.value, 1)}</b> · ${fmt(d.vac)} children vaccinated of ${fmt(d.tgt)} target`; }).join("") });
+  draw(id, { tooltip: tip, xAxis: axisCat(keys, rotate), yAxis: axisVal(v => pct(v)),
+    series: prods().map(p => barS(p, keys.map(k => { const rs = g[k].filter(r => r.p === p);
+      return { value: +cov(rs).toFixed(4) || null, vac: vac(rs), tgt: tgt(rs) }; }), VCOL[p],
       { label: { show: keys.length <= 6, position: "top", formatter: x => pct(x.value), color: css("--ink-2") } })) });
 }
 function simplePie(id, data, colors) {

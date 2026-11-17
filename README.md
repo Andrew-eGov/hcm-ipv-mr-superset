@@ -13,7 +13,7 @@ Field database (.xlsx) ──► tools/load_field_data.py ──► Elasticsearc
                                                           field-child-v1     (one doc per child)
                                                           field-site-day-v1  (one doc per site × date × vaccine)
 Elasticsearch ──► Trino (elasticsearch connector) ──┐
-Postgres "microplan" ──► Trino (postgresql) ────────┴──► Superset 6.1 (12 virtual datasets, 69 charts)
+Postgres "microplan" ──► Trino (postgresql) ────────┴──► Superset 6.1 (13 virtual datasets, 75 charts)
   dim_site, districts, region/district shapes, products       60 s cache, 5 min auto-refresh
 ```
 

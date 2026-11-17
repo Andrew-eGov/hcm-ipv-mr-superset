@@ -59,6 +59,14 @@ CROSS JOIN UNNEST(ARRAY['Vaccinated', 'Remaining to target'], ARRAY[1, 2],
                   ARRAY[b.vaccinated, b.target - b.vaccinated]) AS t(slice, slice_order, children)"""
 
 
+def ds_coverage_long():
+    """Children vaccinated and target as rows (measure, children), so a chart can show both numbers on hover."""
+    return f"""
+SELECT b.region, b.district, b.site_name, b.product, b.product_label, b.event_date, m.measure, m.children
+FROM ({site_day_base()}) b
+CROSS JOIN UNNEST(ARRAY['Vaccinated', 'Target'], ARRAY[b.vaccinated, b.target]) AS m(measure, children)"""
+
+
 def ds_age():
     """Children vaccinated by age group; labels exactly as in the field database (differ by vaccine)."""
     return f"""
@@ -226,6 +234,7 @@ DATASETS = {
     # name: (function, temporal column or None)
     "field_site_day": (ds_site_day, "event_date"),
     "field_progress_pie": (ds_progress_pie, "event_date"),
+    "field_coverage_long": (ds_coverage_long, "event_date"),
     "field_age": (ds_age, "event_date"),
     "field_children": (ds_children, "event_date"),
     "field_child_status": (ds_child_status, "event_date"),

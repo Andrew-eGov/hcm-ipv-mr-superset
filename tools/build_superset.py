@@ -236,6 +236,23 @@ def table(tab, row, width, name, ds, groupby, metrics, height=60, order=None, fi
           column_config=formats or {}, conditional_formatting=cond or [])
 
 
+def coverage_bars(tab, row, width, name, x, height=50):
+    """Coverage % bars (MR and IPV side by side) with the absolute numbers on hover. Superset's bar chart can only
+    show the plotted metric in its tooltip, so a mixed chart adds children vaccinated and target as tiny points on a
+    second axis: they appear in the hover, not as bars."""
+    cov = M("SUM(CASE WHEN measure = 'Vaccinated' THEN children END) / NULLIF(SUM(CASE WHEN measure = 'Target' THEN children END), 0)",
+            "Coverage")
+    chart(tab, row, width, height, name, "field_coverage_long", "mixed_timeseries", x_axis=x,
+          metrics=[cov], groupby=["product_label"], adhoc_filters=[TIME_F()], seriesType="bar", show_value=True,
+          only_total=False, y_axis_format=".0%", y_axis_bounds=[0, None], stack=False,
+          metrics_b=[M("SUM(children)", "Children")], groupby_b=["product_label", "measure"],
+          adhoc_filters_b=[TIME_F()], seriesTypeB="scatter", markerEnabledB=True, markerSizeB=1, show_valueB=False,
+          yAxisIndex=0, yAxisIndexB=1, y_axis_format_secondary=",d", show_legend=True, legendOrientation="top",
+          legendType="scroll", rich_tooltip=True, color_scheme="supersetColors",
+          xAxisLabelRotation=45, row_limit=10000, row_limit_b=10000, zoomable=False, truncateYAxis=False,
+          x_axis_sort_asc=True)
+
+
 def handlebars(tab, row, width, name, ds, metrics, template, filters=(), height=20):
     chart(tab, row, width, height, name, ds, "handlebars", query_mode="aggregate", groupby=[], metrics=metrics,
           adhoc_filters=list(filters), row_limit=10, handlebarsTemplate=template, styleTemplate="")
@@ -346,10 +363,8 @@ def define(days_remaining):
     for v, f in VACCINES:
         pie(T, 2, 6, f"Overview: {v} vaccinated vs remaining to target", "field_progress_pie", "slice",
             M("SUM(children)", "Children"), filters=f + [TIME_F()])
-    bar(T, 3, 6, "Overview: coverage by region (MR and IPV)", "field_site_day", "region", [COVERAGE], ["product_label"],
-        fmt=".0%", filters=[TIME_F()])
-    bar(T, 3, 6, "Overview: coverage by district (MR and IPV)", "field_site_day", "district", [COVERAGE], ["product_label"],
-        fmt=".0%", filters=[TIME_F()])
+    coverage_bars(T, 3, 6, "Overview: coverage by region (MR and IPV)", "region")
+    coverage_bars(T, 3, 6, "Overview: coverage by district (MR and IPV)", "district")
     for v in ("MR", "IPV"):
         col = f"{v.lower()}_coverage_pct"
         choropleth(T, 4, 6, f"Overview map: {v} coverage % by district", "field_district_map",
@@ -381,10 +396,8 @@ def define(days_remaining):
     for v in ("MR", "IPV"):
         col = f"{v.lower()}_coverage_pct"
         choropleth(T, 1, 6, f"Coverage map: {v} coverage % by region", "field_region_map", M(f"MAX({col})", f"{v} coverage %"))
-    bar(T, 2, 6, "Coverage by region (MR and IPV)", "field_site_day", "region", [COVERAGE], ["product_label"], fmt=".0%",
-        filters=[TIME_F()])
-    bar(T, 2, 6, "Coverage by district (MR and IPV)", "field_site_day", "district", [COVERAGE], ["product_label"], fmt=".0%",
-        filters=[TIME_F()])
+    coverage_bars(T, 2, 6, "Coverage by region (MR and IPV)", "region")
+    coverage_bars(T, 2, 6, "Coverage by district (MR and IPV)", "district")
     for v, f in VACCINES:
         bar(T, 3, 6, f"Coverage: {v} children vaccinated by age group", "field_age", "age_group",
             [M("SUM(vaccinated)", "Children vaccinated")], filters=f + [TIME_F()], sort_by_metric=False,
