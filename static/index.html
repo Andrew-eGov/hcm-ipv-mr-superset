@@ -524,8 +524,8 @@ R.Coverage = () => [
   zeroAefiCards(),
   `<div class="grid">${card("c6", "cvClu", "Map: vaccination facilities, grouped (numbers = children vaccinated)", "Colour shows coverage: green high, amber mid, red low. Hover for MR and IPV delivered.", "map")}${card("c6", "cvZD", "Map: zero-dose children by district and facility", "", "map")}</div>`,
   `<div class="grid">${prods().map(p => card("c6", `cvMap${p}`, `Map: ${p} coverage % by region`, "", "map")).join("")}</div>`,
-  `<div class="grid">${card("c6", "cvReg", "Coverage by region (MR and IPV)")}${card("c6", "cvDist", "Coverage by district (MR and IPV)")}</div>`,
-  `<div class="grid">${card("c12", "cvClu2", "Coverage by cluster (MR and IPV)")}</div>`,
+  `<div class="grid">${card("c12", "cvReg", "Coverage by region (MR and IPV)")}</div>`,
+  `<div class="grid">${card("c6", "cvDist", "Coverage by district (MR and IPV)")}${card("c6", "cvClu2", "Coverage by cluster (MR and IPV)")}</div>`,
   `<div class="grid">${prods().map(p => card("c6", `cvAge${p}`, `${p}: children vaccinated by age group`, "Age groups as recorded in the field database")).join("")}</div>`,
     `<div class="grid">${prods().map(p => card("c6", `cvGen${p}`, `Gender distribution (${p})`)).join("")}</div>`,
   `<div class="grid">${card("c12", "cvSite", "Coverage by facility (MR and IPV)")}</div>`,
@@ -536,7 +536,7 @@ R.Coverage = () => [
   () => {
     siteClusterMap("cvClu"); zeroDoseMap("cvZD");
     prods().forEach(p => choro(`cvMap${p}`, D.geo_regions, "region", s => s.region, p, `${p} coverage`));
-    covBars("cvReg", s => s.region); covBars("cvDist", s => s.district); covBars("cvClu2", s => s.cluster);
+    covBars("cvReg", s => s.region); covBars("cvDist", s => s.district); covBars("cvClu2", s => s.cluster, 30);
     prods().forEach(p => { const g = by(D.age.filter(r => r.p === p && siteOk(S(r.code)) && dateOk(r.d)), r => r.o + "|" + r.g); const ks = Object.keys(g).sort();
       draw(`cvAge${p}`, { xAxis: axisCat(ks.map(k => k.split("|")[1])), yAxis: axisVal(), series: [barS(p, ks.map(k => sum(g[k], r => r.n)), VCOL[p], { label: { show: true, position: "top", color: css("--ink-2"), formatter: x => fmt(x.value) } })] }); });
       prods().forEach(p => { const g = by(D.children.filter(r => r.p === p && siteOk(S(r.code)) && dateOk(r.d)), r => r.gender);

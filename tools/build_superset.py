@@ -422,9 +422,9 @@ def define(days_remaining):
     for v in ("MR", "IPV"):
         col = f"{v.lower()}_coverage_pct"
         choropleth(T, 1, 6, f"Coverage map: {v} coverage % by region", "field_region_map", M(f"MAX({col})", f"{v} coverage %"))
-    coverage_bars(T, 2, 6, "Coverage by region (MR and IPV)", "region")
-    coverage_bars(T, 2, 6, "Coverage by district (MR and IPV)", "district")
-    coverage_bars(T, "2c", 12, "Coverage by cluster (MR and IPV)", "cluster")
+    coverage_bars(T, 2, 12, "Coverage by region (MR and IPV)", "region")
+    coverage_bars(T, "2c", 6, "Coverage by district (MR and IPV)", "district")
+    coverage_bars(T, "2c", 6, "Coverage by cluster (MR and IPV)", "cluster")
     for v, f in VACCINES:
         bar(T, 3, 6, f"Coverage: {v} children vaccinated by age group", "field_age", "age_group",
             [M("SUM(vaccinated)", "Children vaccinated")], filters=f + [TIME_F()], sort_by_metric=False,
