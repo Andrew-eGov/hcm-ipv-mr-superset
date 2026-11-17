@@ -1,9 +1,9 @@
-site_code,site_name,source_names,region,district,facility_type,latitude,longitude,coord_source,include
-F-2026-11-12-037577,Ou-Nick Clinic,OU-NICK,Oshana,Oshakati,Clinic,-17.7764325,15.6903803,Field database (Agg_IPV),yes
-F-2026-11-12-037581,Okatana Health Centre,Okatana Health Centre,Oshana,Oshakati,Health centre,-17.7407335,15.7132767,Field database (Agg_IPV),yes
-F-2026-11-12-037576,Oshakati Health,oshakati health,Oshana,Oshakati,Health centre,-17.7902713,15.7019695,Field database (Agg_IPV),yes
-F-2026-11-12-037572,test,test,Oshana,Oshakati,Test,-17.7925975,15.704494,Field database (Agg_IPV),no
-F-2026-11-12-037578,Katsura Health Centre,Katsura Health Centre,Khomas,Windhoek,Health centre,-22.5223561,17.0518382,Field database (Agg_IPV),yes
-F-2026-11-12-037580,Steps for Children School,steps for children school,Khomas,Windhoek,School,-22.5320318,17.0535916,Field database (Agg_IPV),yes
-F-2026-11-13-037599,Flowers of Christ Church,Flowers of Christ Church,Khomas,Windhoek,Outreach point,-22.5297446,17.0562103,Field database (Agg_IPV),yes
-F-2026-11-13-037600,Maximilian Clinic,Maximilian clinic,Khomas,Windhoek,Clinic,-22.528,17.0539,Approximate (centre of the other Khomas sites - no coordinates in source or OSM),yes
+site_code,site_name,source_names,region,district,cluster,facility_type,latitude,longitude,coord_source,include
+F-2026-11-12-037577,Ou-Nick Clinic,OU-NICK,Oshana,Oshakati,Oshakati Health Centre,Clinic,-17.7764325,15.6903803,Field database (Agg_IPV),yes
+F-2026-11-12-037581,Okatana Health Centre,Okatana Health Centre,Oshana,Oshakati,Oshakati Health Centre,Health centre,-17.7407335,15.7132767,Field database (Agg_IPV),yes
+F-2026-11-12-037576,Oshakati Health,oshakati health,Oshana,Oshakati,Oshakati Clinic,Health centre,-17.7902713,15.7019695,Field database (Agg_IPV),yes
+F-2026-11-12-037572,test,test,Oshana,Oshakati,Oshakati Health Centre,Test,-17.7925975,15.704494,Field database (Agg_IPV),no
+F-2026-11-12-037578,Katsura Health Centre,Katsura Health Centre,Khomas,Windhoek,Katutura,Health centre,-22.5223561,17.0518382,Field database (Agg_IPV),yes
+F-2026-11-12-037580,Steps for Children School,steps for children school,Khomas,Windhoek,Katutura,School,-22.5320318,17.0535916,Field database (Agg_IPV),yes
+F-2026-11-13-037599,Flowers of Christ Church,Flowers of Christ Church,Khomas,Windhoek,Katutura,Outreach point,-22.5297446,17.0562103,Field database (Agg_IPV),yes
+F-2026-11-13-037600,Maximilian Clinic,Maximilian clinic,Khomas,Windhoek,Katutura,Clinic,-22.528,17.0539,Approximate (centre of the other Khomas sites - no coordinates in source or OSM),yes

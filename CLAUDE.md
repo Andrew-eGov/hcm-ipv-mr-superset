@@ -4,7 +4,7 @@ Superset 6.1 dashboard for the DIGIT HCM **Namibia IPV + MR integrated campaign*
 
 ## Where the work stands
 
-- **Done:** the live stack (Superset → Trino → Elasticsearch + Postgres) with 4 tabs (Overview, Coverage, Inventory, Data Quality), 69 charts and native filters, restructured per the 16 Nov 2026 review. It runs on the **Zambezi region field database** (real field data for 10–11 Nov, 3 districts, 23 sites), not synthetic data.
+- **Done:** the live stack (Superset → Trino → Elasticsearch + Postgres) with 4 tabs (Overview, Coverage, Inventory, Data Quality), 69 charts and native filters, restructured per the 16 Nov 2026 review. It runs on the **Zambezi region field database** (real field data for 10–11 Nov, district Katima, 3 clusters, 23 facilities), not synthetic data.
 - **Done:** `static/`, a standalone review page with the same tabs. `static/data.json` (aggregates only) is git-ignored.
 - **Done:** `docs/HCM_Elastic_Plug-in_Sheet.xlsx`, rewritten for the two field indexes.
 - **Next:**
@@ -35,7 +35,7 @@ Superset 6.1 dashboard for the DIGIT HCM **Namibia IPV + MR integrated campaign*
 
 - `tools/load_field_data.py` loads the workbook into ES: `field-child-v1` (one doc per child) and `field-site-day-v1` (one doc per site × date × vaccine, merging the Agg and Stock sheets on site code + date). It also loads `data/sites.csv` into Postgres `dim_site`.
 - `tools/datasets.py` is the **single source of truth** for every Superset dataset. Change SQL there, never in Superset's UI: `tools/build_superset.py` deletes and recreates every dataset, chart and the dashboard on each run.
-- Every dataset exposes `region`, `district`, `site_name`, `product` and `event_date` where they apply. The native filters are scoped by those column names.
+- Every dataset exposes `region`, `district`, `cluster`, `site_name` (shown as Facility), `product` and `event_date` where they apply. The native filters are scoped by those column names.
 - Coverage denominators are the **daily site targets of the sites and days that uploaded data**. Keep it that way: the review requires planned figures to be scoped to uploading areas, never the national plan.
 
 ## Traps already hit
@@ -65,9 +65,9 @@ From the product owner, the 16 Nov review or the data. Change them only after as
 - **Sankey store layers** (national, regional, district) are synthetic sums of the site layer, as the review allows.
 - **Age-group labels as in the source:** MR 6–11 months, 12–59 months, 5–10 years; IPV 14 weeks–11 months, 12–59 months.
 - **Facility type from the site name**; other sites are outreach points; Masokotwani is a school.
-- **Site coordinates:** from the workbook where present, otherwise OSM Nominatim; Homba Clinic and Nchichimani are at their district centre (flagged).
-- **Districts come from the workbook's Cluster column** (owner's instruction): Katima → Katima Mulilo, Bukalo, Sangwali. No cluster level: Region > District > Site. `load_field_data.py` replaces the microplan's single Zambezi district with these three (approximate Voronoi shapes; Bukalo and Sangwali codes are dashboard-assigned; microplan targets stay on Katima Mulilo; the synthetic sync users are spread over the three districts by site count).
-- **Data Quality shows app sync only** (owner's instruction; the field-data checks such as stock balance and line list vs aggregate were removed). **Sync is synthetic**: `field-user-sync-v1`, one doc per vaccinator / registrar, flagged `synthetic = 1`, shown only for districts with field data. Replace with HCM sync / downsync data when connected.
+- **Site coordinates:** from the workbook where present, otherwise OSM Nominatim; Homba Clinic and Nchichimani are at their cluster centre (flagged).
+- **Hierarchy: Region > District > Cluster > Facility** (owner's instruction, 17 Nov 2026; "site" in the data and column names is shown as "Facility"). Districts: Katima (Zambezi), Oshakati (Oshana), Windhoek (Khomas). Clusters: Zambezi's from the workbook's Cluster column (Bukalo, Katima Mulilo, Sangwali); Oshana's from its workbook (Oshakati Clinic, Oshakati Health Centre); Khomas is the Katutura cluster (owner's instruction; the workbook labels it Windhoek Central Hospital). `tools/load_field_data.py` renames the microplan's single Zambezi district "Katima Mulilo" to "Katima" (same boundary code and targets) so it is not confused with the Katima Mulilo cluster; it refuses a database still holding the old three-district split (rerun `tools/load_microplan.py`). Clusters have no shapes, so maps stay at district level; the synthetic sync users in Zambezi are spread over its three clusters by facility count.
+- **Data Quality shows app sync only** (owner's instruction; the field-data checks such as stock balance and line list vs aggregate were removed). **Sync is synthetic**: `field-user-sync-v1`, one doc per vaccinator / registrar, flagged `synthetic = 1`, shown only for the clusters of the stock-and-sync district (Katima), by cluster. Replace with HCM sync / downsync data when connected.
 - **The dashboards do not label synthetic figures** (owner's instruction, 17 Nov): zero-dose, AEFI, gender and sync are synthetic, but the cards, charts and maps no longer say so. Keep that in mind before sharing figures outside the team.
 - **Zero-dose and AEFI are synthetic** (owner asked for one card each on Overview and Coverage, plus zero-dose on the Coverage map): per-child flags from `load_field_data.py`, labelled synthetic everywhere; real workbook columns `Zero_Dose` / `AEFI` take over automatically.
 - **Gender is synthetic** (owner's request): stable per child id, about 50.7% male, flagged `gender_synthetic = 1` and labelled synthetic on both dashboards. A real `Gender`/`Sex` column in the workbook takes over automatically.

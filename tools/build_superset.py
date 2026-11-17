@@ -106,6 +106,11 @@ def ensure_db():
     })["id"]
 
 
+# Hierarchy: Region > District > Cluster > Facility ("site" in the data and column names)
+VERBOSE = {"region": "Region", "district": "District", "cluster": "Cluster", "site_name": "Facility",
+           "facility_type": "Facility type", "product_label": "Vaccine", "product": "Vaccine", "event_date": "Date"}
+
+
 def create_datasets(db_id):
     ids, cols = {}, {}
     for name, (fn, dttm) in DATASETS.items():
@@ -118,10 +123,11 @@ def create_datasets(db_id):
         upd = {"cache_timeout": 60, "description": (fn.__doc__ or "").strip()}
         if dttm:
             upd["main_dttm_col"] = dttm
-            upd["columns"] = [{"id": c["id"], "column_name": c["column_name"],
-                               "is_dttm": c["column_name"] == dttm or c.get("is_dttm", False),
-                               "type": c.get("type"), "groupby": True, "filterable": True}
-                              for c in info["columns"]]
+        upd["columns"] = [{"id": c["id"], "column_name": c["column_name"],
+                           "verbose_name": VERBOSE.get(c["column_name"], c.get("verbose_name")),
+                           "is_dttm": c["column_name"] == dttm or c.get("is_dttm", False),
+                           "type": c.get("type"), "groupby": True, "filterable": True}
+                          for c in info["columns"]]
         api("PUT", f"/api/v1/dataset/{did}?override_columns=false", json=upd)
         ids[name] = did
         print(f"  dataset {name:22s} id={did} cols={len(cols[name])}")
@@ -369,39 +375,39 @@ def define(days_remaining):
         big(T, r, 2, f"Overview: {v} children vaccinated", "field_site_day", M("SUM(vaccinated)", "Vaccinated"),
             f"{v}: children vaccinated", ",d", f + [TIME_F()])
         big(T, r, 2, f"Overview: {v} target", "field_site_day", M("SUM(target)", "Target"),
-            f"{v}: target", ",d", f + [TIME_F()], note="reporting sites and days")
+            f"{v}: target", ",d", f + [TIME_F()], note="reporting facilities and days")
         big(T, r, 2, f"Overview: {v} coverage", "field_site_day", COVERAGE, f"{v}: coverage of target", ".1%", f + [TIME_F()])
         big(T, r, 2, f"Overview: {v} wastage", "field_site_day", WASTAGE, f"{v}: wastage (allowed 5%)", ".1%", f + [TIME_F()], note="reported figure" if v == "MR" else "")
         big(T, r, 2, f"Overview: {v} vials opened", "field_site_day", M("SUM(vials_opened)", "Vials opened"),
             f"{v}: vials opened", ",d", f + [TIME_F()])
-        big(T, r, 2, f"Overview: {v} sites reporting", "field_site_day", M("COUNT(DISTINCT site_code)", "Sites"),
-            f"{v}: sites reporting", ",d", f + [TIME_F()])
+        big(T, r, 2, f"Overview: {v} facilities reporting", "field_site_day", M("COUNT(DISTINCT site_code)", "Facilities"),
+            f"{v}: facilities reporting", ",d", f + [TIME_F()])
     zero_dose_aefi_cards(T, "1Z")
     for v, f in VACCINES:
         pie(T, 2, 6, f"Overview: {v} vaccinated vs remaining to target", "field_progress_pie", "slice",
             M("SUM(children)", "Children"), filters=f + [TIME_F()])
-    coverage_bars(T, 3, 6, "Overview: coverage by region (MR and IPV)", "region")
     coverage_bars(T, 3, 6, "Overview: coverage by district (MR and IPV)", "district")
+    coverage_bars(T, 3, 6, "Overview: coverage by cluster (MR and IPV)", "cluster")
     for v in ("MR", "IPV"):
         col = f"{v.lower()}_coverage_pct"
         choropleth(T, 4, 6, f"Overview map: {v} coverage % by district", "field_district_map",
                    M(f"MAX({col})", f"{v} coverage %"), tooltip=("district",))
     point_map(T, 5, 9, "Overview map: health facilities by type", "field_sites", "facility_type", FACILITY_TYPES,
-              ("site_name", "facility_type", "district"), legend_title="Facility type",
-              note="Facility type comes from the site name in the field database (Health Centre / Clinic); other "
-                   "sites are outreach points, and Masokotwani is a school. Homba Clinic and Nchichimani have no "
-                   "coordinates and sit at their district centre.")
+              ("Facility", "facility_type", "Cluster name", "District name"), legend_title="Facility type",
+              note="Facility type comes from the facility name in the field database (Health Centre / Clinic); other "
+                   "facilities are outreach points, and Masokotwani is a school. Homba Clinic and Nchichimani have no "
+                   "coordinates and sit at their cluster centre.")
 
     # ---------------- Coverage
     T = "Coverage"
     zero_dose_aefi_cards(T, 0)
     # Map 1: vaccination sites coloured by coverage (lower of MR and IPV). deck.gl multi-layer maps cannot size or
     # label points by a number, so the numbers (children, MR and IPV delivered, zero-dose) are in the hover tooltip.
-    point_map(T, "0m", 4, "Coverage map: vaccination sites by coverage", "field_sites", "coverage_status", COVERAGE_STATUS,
-              ("Site", "Children vaccinated", "MR delivered", "IPV delivered", "MR coverage %", "IPV coverage %",
+    point_map(T, "0m", 4, "Coverage map: vaccination facilities by coverage", "field_sites", "coverage_status", COVERAGE_STATUS,
+              ("Facility", "Cluster name", "Children vaccinated", "MR delivered", "IPV delivered", "MR coverage %", "IPV coverage %",
                "Zero-dose children"),
               legend_title="Coverage", legend_width=2,
-              note="Colour = the lower of MR and IPV coverage at the site. Hover a site for children vaccinated, "
+              note="Colour = the lower of MR and IPV coverage at the facility. Hover a facility for children vaccinated, "
                    "MR and IPV delivered and zero-dose children.")
     # Map 2: zero-dose children (synthetic) by district, with the numbers in the tooltip
     choropleth(T, "0m", 6, "Coverage map: zero-dose children by district", "field_district_map",
@@ -412,6 +418,7 @@ def define(days_remaining):
         choropleth(T, 1, 6, f"Coverage map: {v} coverage % by region", "field_region_map", M(f"MAX({col})", f"{v} coverage %"))
     coverage_bars(T, 2, 6, "Coverage by region (MR and IPV)", "region")
     coverage_bars(T, 2, 6, "Coverage by district (MR and IPV)", "district")
+    coverage_bars(T, "2c", 12, "Coverage by cluster (MR and IPV)", "cluster")
     for v, f in VACCINES:
         bar(T, 3, 6, f"Coverage: {v} children vaccinated by age group", "field_age", "age_group",
             [M("SUM(vaccinated)", "Children vaccinated")], filters=f + [TIME_F()], sort_by_metric=False,
@@ -419,7 +426,7 @@ def define(days_remaining):
     for v, f in VACCINES:
         pie(T, "3g", 6, f"Coverage: gender distribution ({v})", "field_children", "gender", M("SUM(children)", "Children"),
             filters=f + [TIME_F()], legend=True)
-    bar(T, 4, 12, "Coverage by site (MR and IPV)", "field_site_day", "site_name", [COVERAGE], ["product_label"], fmt=".0%",
+    bar(T, 4, 12, "Coverage by facility (MR and IPV)", "field_site_day", "site_name", [COVERAGE], ["product_label"], fmt=".0%",
         filters=[TIME_F()], values=False)
     # Mixed chart so the two series look different: actual = filled area, planned = line with dot markers;
     # Superset's line chart has no dashed-line option.
@@ -436,9 +443,9 @@ def define(days_remaining):
         [M("SUM(vaccinated)", "Children vaccinated")], ["product_label"], temporal=True)
     pie(T, 6, 6, "Coverage: children by vaccines received", "field_child_status", "vaccine_status",
         M("SUM(children)", "Children"), filters=[TIME_F()], legend=True, label="value_percent")
-    bar(T, 6, 6, "Coverage: children vaccinated by district", "field_site_day", "district",
+    bar(T, 6, 6, "Coverage: children vaccinated by cluster", "field_site_day", "cluster",
         [M("SUM(vaccinated)", "Children vaccinated")], ["product_label"], filters=[TIME_F()])
-    table(T, 7, 12, "Coverage summary by site", "field_site_day", ["district", "site_name", "facility_type", "product_label"],
+    table(T, 7, 12, "Coverage summary by facility", "field_site_day", ["district", "cluster", "site_name", "facility_type", "product_label"],
           [M("SUM(target)", "Target"), M("SUM(vaccinated)", "Children vaccinated"), COVERAGE,
            M("SUM(target) - SUM(vaccinated)", "Remaining to target")],
           formats={"Coverage of target": {"d3NumberFormat": ".1%"}},
@@ -449,9 +456,9 @@ def define(days_remaining):
 
     # ---------------- Inventory
     T = "Inventory"
-    big(T, 1, 3, "Inventory: stores and sites with a stock entry", "field_stock_site_day",
-        M("COUNT(DISTINCT CASE WHEN vials_received IS NOT NULL THEN site_code END)", "Sites"),
-        "Stores and sites with at least one stock entry", ",d", [TIME_F()])
+    big(T, 1, 3, "Inventory: stores and facilities with a stock entry", "field_stock_site_day",
+        M("COUNT(DISTINCT CASE WHEN vials_received IS NOT NULL THEN site_code END)", "Facilities"),
+        "Stores and facilities with at least one stock entry", ",d", [TIME_F()])
     for v, f in VACCINES:
         big(T, 1, 3, f"Inventory: {v} vials in hand, district store", "field_stock_days", M("SUM(vials_in_hand)", "Vials"),
             f"{v} vials in hand — district store", ",d", f, note="returned unopened on the latest day")
@@ -472,38 +479,38 @@ def define(days_remaining):
         big(T, r, 2, f"Inventory: {v} wastage", "field_stock_site_day", WASTAGE, f"{v}: wastage % (allowed 5%)", ".1%",
             f + [TIME_F()], note="reported figure" if v == "MR" else "")
     # hover shows the numbers behind each bar: vials in hand and vials opened a day; doses opened and children vaccinated
-    bars_with_numbers(T, 4, 6, "Inventory: days of stock left by site", "field_stock_days_long", "site_name",
+    bars_with_numbers(T, 4, 6, "Inventory: days of stock left by facility", "field_stock_days_long", "site_name",
                       DAYS_OF_STOCK, "vials", ",.1f", ",.1f", sort="Days of stock",
                       lines=[LINE_AT(days_remaining, f"Campaign days remaining ({days_remaining})")], values=False)
-    bars_with_numbers(T, 4, 6, "Inventory: wastage % by district (allowed 5%)", "field_wastage_long", "district",
+    bars_with_numbers(T, 4, 6, "Inventory: wastage % by cluster (allowed 5%)", "field_wastage_long", "cluster",
                       WASTAGE_LONG, "doses", ".1%", ",d", filters=[TIME_F()], lines=[LINE_AT(0.05, "Allowed 5%")])
-    bars_with_numbers(T, 5, 12, "Inventory: wastage % by site (allowed 5%)", "field_wastage_long", "site_name",
+    bars_with_numbers(T, 5, 12, "Inventory: wastage % by facility (allowed 5%)", "field_wastage_long", "site_name",
                       WASTAGE_LONG, "doses", ".1%", ",d", filters=[TIME_F()], lines=[LINE_AT(0.05, "Allowed 5%")],
                       values=False)
     for v, f in VACCINES:
-        bar(T, 6, 6, f"Inventory: {v} cumulative vials issued (net) vs vials needed, by site", "field_stock_site_day", "site_name",
+        bar(T, 6, 6, f"Inventory: {v} cumulative vials issued (net) vs vials needed, by facility", "field_stock_site_day", "site_name",
             [M("SUM(vials_issued_net)", "Vials issued (net)"), M("ROUND(SUM(vials_needed), 1)", "Vials needed")],
             filters=f + [TIME_F()], sort_by_metric=True, values=False)
     table(T, 7, 12, "Inventory: cumulative stock by facility (red = not enough vials for target)", "field_stock_site_day",
-          ["district", "site_name", "product_label"],
+          ["district", "cluster", "site_name", "product_label"],
           [M("SUM(vials_issued_net)", "Vials issued (net)"), M("ROUND(SUM(vials_needed), 1)", "Vials needed"),
            M("ROUND(SUM(vials_issued_net) - SUM(vials_needed), 1)", "Vials short (-) or spare (+)"), M("SUM(target)", "Target")],
           order=M("ROUND(SUM(vials_issued_net) - SUM(vials_needed), 1)", "Vials short (-) or spare (+)"), desc=False,
           cond=[{"colorScheme": "#EFA1AA", "column": "Vials short (-) or spare (+)", "operator": "<", "targetValue": 0}],
           filters=[TIME_F()], height=60)
-    chart(T, 8, 12, 72, "Inventory: stock flow in vials - national > regional > district store > site > opened / returned",
+    chart(T, 8, 12, 72, "Inventory: stock flow in vials - national > regional > district store > facility > opened / returned",
           "field_stock_flow", "sankey_v2", source="source", target="target", metric=M("SUM(vials)", "Vials"),
           adhoc_filters=[TIME_F()], row_limit=10000, color_scheme="supersetColors")
     for v in ("MR", "IPV"):
-        point_map(T, f"9{v}", 9, f"Inventory map: sites by cumulative stock against need ({v})", "field_sites",
+        point_map(T, f"9{v}", 9, f"Inventory map: facilities by cumulative stock against need ({v})", "field_sites",
                   f"{v.lower()}_stock_status", STATUS_COLOURS,
-                  ("Site", f"{v} status", f"{v} vials received (incl. additional)", f"{v} vials left over (returned unopened)",
+                  ("Facility", "Cluster name", f"{v} status", f"{v} vials received (incl. additional)", f"{v} vials left over (returned unopened)",
                    f"{v} vials used (issued net)", f"{v} vials needed for target", f"{v} vials short (-) or spare (+)"),
                   filters=[F("data_scope", "IN", ["full"])],
                   legend_title=f"{v}: vials issued (net) vs needed",
                   note="Vials needed = target ÷ doses per vial × 1.05, summed over all campaign days with data.")
-    table(T, 10, 12, "Inventory: stock by site and campaign day", "field_stock_site_day",
-          ["event_date", "district", "site_name", "product_label"],
+    table(T, 10, 12, "Inventory: stock by facility and campaign day", "field_stock_site_day",
+          ["event_date", "district", "cluster", "site_name", "product_label"],
           [M("SUM(vials_received)", "Vials received"), M("SUM(additional_vials_received)", "Additional vials received"),
            M("SUM(vials_opened)", "Vials opened"), M("SUM(vials_returned_unopened)", "Vials returned unopened"),
            M("SUM(vials_issued_net)", "Vials issued (net)"), M("SUM(vaccinated)", "Children vaccinated"), WASTAGE],
@@ -526,10 +533,10 @@ def define(days_remaining):
         "Frontline workers synced at least once", ",d", fl)
     big(T, 1, 4, "DQ: frontline sync rate", "field_sync", M("AVG(CAST(synced AS double))", "Rate"), "Frontline sync rate",
         ".1%", fl)
-    bar(T, "4b", 6, "DQ: frontline sync rate by district", "field_sync", "district",
+    bar(T, "4b", 6, "DQ: frontline sync rate by cluster", "field_sync", "cluster",
         [M("AVG(CAST(synced AS double))", "Sync rate")], fmt=".0%", filters=[F("user_group", "IN", ["Frontline workers"])],
         sort_by_metric=True, x_axis_sort_asc=True, y_max=1)
-    bar(T, "4b", 6, "DQ: downsync rate by district", "field_sync", "district",
+    bar(T, "4b", 6, "DQ: downsync rate by cluster", "field_sync", "cluster",
         [M("AVG(CAST(synced AS double))", "Downsync rate")], fmt=".0%",
         filters=[F("user_group", "IN", ["Vaccinators downsynced"])], x_axis_sort_asc=True, y_max=1)
 
@@ -631,7 +638,8 @@ def native_filters(ds_ids, ds_cols):
     return [
         select("NATIVE_FILTER-region", "Region", "region"),
         select("NATIVE_FILTER-district", "District", "district", ["NATIVE_FILTER-region"]),
-        select("NATIVE_FILTER-site", "Site", "site_name", ["NATIVE_FILTER-district"]),
+        select("NATIVE_FILTER-cluster", "Cluster", "cluster", ["NATIVE_FILTER-district"]),
+        select("NATIVE_FILTER-site", "Facility", "site_name", ["NATIVE_FILTER-cluster"]),
         select("NATIVE_FILTER-product", "Vaccine", "product",
                desc="MR + IPV when empty; pick MR or IPV to show one vaccine"),
         {"id": "NATIVE_FILTER-date", "name": "Campaign date", "filterType": "filter_time", "type": "NATIVE_FILTER",

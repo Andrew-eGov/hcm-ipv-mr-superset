@@ -15,8 +15,9 @@ targets from the microplan). Sites load with data_scope = 'coverage' (no Invento
     tools/.venv/bin/python -I tools/load_regional.py path/to/X_region_MR_IPV_child_database.xlsx
 
 Workbooks default to ../<Region>_region_MR_IPV_child_database.xlsx next to this repo. Region comes from
-the file name; district and clean site names come from data/regional_sites.csv (sites marked
-include=no, such as the 'test' site, are dropped).
+the file name; district, cluster and clean site names come from data/regional_sites.csv (sites marked
+include=no, such as the 'test' site, are dropped). Clusters: Oshana as in the workbook's Cluster column;
+Khomas is the Katutura cluster (owner's instruction; the workbook labels it Windhoek Central Hospital).
 
 What --load will write (same shapes as the Zambezi loader, so Overview and Coverage pick them up):
   field-child-v1      the children (with the same synthetic gender / zero-dose / AEFI flags as Zambezi)
@@ -152,8 +153,8 @@ def load(site_docs, children, sites):
             aefi=synthetic_aefi(c), aefi_synthetic=1)))
     bulk(CHILD_IDX, child_docs)
     cur.execute("DELETE FROM dim_site WHERE site_code = ANY(%s)", (sorted(used),))
-    cur.executemany("INSERT INTO dim_site VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
-                    [(s["site_code"], s["site_name"], s["facility_type"], None, s["region"], s["district"],
+    cur.executemany("INSERT INTO dim_site VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                    [(s["site_code"], s["site_name"], s["facility_type"], None, s["region"], s["district"], s["cluster"],
                       targets[(s["region"], s["district"])]["code"], float(s["latitude"]), float(s["longitude"]),
                       s["coord_source"], "coverage") for s in sites.values() if s["include"] == "yes"])
     conn.commit()

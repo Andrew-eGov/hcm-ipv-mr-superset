@@ -1,6 +1,6 @@
 # HCM IPV + MR Campaign Dashboard (Superset)
 
-This is a live Superset 6.1 dashboard for the Namibia integrated campaign, `NAM-09-01-IPV-MR_NID` (single round, 9–19 Nov 2026, delivering measles-rubella (MR) and IPV). It currently shows the **Zambezi region MR/IPV child and stock database** (10–11 Nov: Katima Mulilo, Bukalo and Sangwali districts, 23 sites; coverage, stock and sync) plus the **Oshana (Oshakati) and Khomas (Windhoek) child databases** (12–13 Nov, 7 sites; coverage only, daily targets from the microplan: district target ÷ teams ÷ 11 days).
+This is a live Superset 6.1 dashboard for the Namibia integrated campaign, `NAM-09-01-IPV-MR_NID` (single round, 9–19 Nov 2026, delivering measles-rubella (MR) and IPV). It currently shows the **Zambezi region MR/IPV child and stock database** (10–11 Nov: Katima district, clusters Bukalo, Katima Mulilo and Sangwali, 23 facilities; coverage, stock and sync) plus the **Oshana (Oshakati) and Khomas (Windhoek) child databases** (12–13 Nov, 7 facilities in the Oshakati and Katutura clusters; coverage only, daily targets from the microplan: district target ÷ teams ÷ 11 days).
 
 **Open:** http://localhost:8088/superset/dashboard/hcm-ipv-mr-namibia/ (local login `admin` / `admin`)
 
@@ -20,7 +20,7 @@ Postgres "microplan" ──► Trino (postgresql) ────────┴─
 ```
 
 * **Real time with no ETL inside Superset.** Charts query ES through Trino; the field indexes are small, so plain scans return in about a second.
-* **Joins happen in Trino.** ES rows join to `dim_site` (site → district → region, facility type, coordinates) and `dim_product` (doses per vial, allowed wastage).
+* **Joins happen in Trino.** ES rows join to `dim_site` (facility → cluster → district → region, facility type, coordinates) and `dim_product` (doses per vial, allowed wastage).
 * **Maps show Namibia only.** Superset maps use a transparent basemap, so only Namibia's region and district shapes are drawn; the review page masks everything outside Namibia. Coverage maps share one red-amber-green scale with a legend (<50% red, 70–80% amber, 90%+ green).
 
 ## Tabs
@@ -29,14 +29,14 @@ The dashboard has four tabs. Supervision and Complaints are hidden for this rele
 
 | Tab | Contents |
 |---|---|
-| Overview | Per vaccine: children vaccinated, target, coverage of target, wastage, vials opened, sites reporting; zero-dose children and AEFI cases (synthetic); pie of vaccinated vs remaining to target; coverage by region and by district; coverage maps by district; health-facility map by type |
-| Coverage | Zero-dose children and AEFI cases (synthetic); vaccination-site map coloured by coverage with MR / IPV delivered on hover (numbered clusters on the review page); zero-dose children by district and site; coverage maps by region; coverage by region, district and site; children vaccinated by age group (labels as in the source); gender distribution per vaccine; planned vs actual (cumulative); children per day; children by vaccines received; site summary table |
-| Inventory | Stores and sites with a stock entry; vials in hand in the district store; campaign day; vials received, additional, opened, returned unopened, issued (net) and wastage per vaccine; days of stock by site with a campaign-days-remaining line; wastage by district and by site with the 5% allowed line; cumulative vials issued vs needed by site; full-width Sankey (national > regional > district store > site > opened / returned); stock maps; stock table by site and day |
-| Data Quality | App sync only (synthetic until HCM is connected): vaccinators downsynced and frontline workers synced (total, synced at least once, rate); frontline sync rate and downsync rate by district |
+| Overview | Per vaccine: children vaccinated, target, coverage of target, wastage, vials opened, facilities reporting; zero-dose children and AEFI cases (synthetic); pie of vaccinated vs remaining to target; coverage by district and by cluster; coverage maps by district; health-facility map by type |
+| Coverage | Zero-dose children and AEFI cases (synthetic); vaccination-site map coloured by coverage with MR / IPV delivered on hover (numbered clusters on the review page); zero-dose children by district and site; coverage maps by region; coverage by region, district, cluster and facility; children vaccinated by age group (labels as in the source); gender distribution per vaccine; planned vs actual (cumulative); children per day; children vaccinated by cluster; children by vaccines received; summary table (district, cluster, facility) |
+| Inventory | Stores and facilities with a stock entry; vials in hand in the district store; campaign day; vials received, additional, opened, returned unopened, issued (net) and wastage per vaccine; days of stock by facility with a campaign-days-remaining line (hover: vials in hand and opened a day); wastage by cluster and by facility with the 5% allowed line (hover: doses opened and children vaccinated); cumulative vials issued vs needed by facility; full-width Sankey (national > regional > district store > facility > opened / returned); stock maps; stock tables (district, cluster, facility) |
+| Data Quality | App sync only (synthetic until HCM is connected): vaccinators downsynced and frontline workers synced (total, synced at least once, rate); frontline sync rate and downsync rate by cluster |
 
 **Planned figures are scoped to the data.** Target is the sum of the daily site targets for the sites and days that uploaded data, so coverage is never compared with the national plan, and every filter changes numerator and denominator together.
 
-**Filters:** Region → District → Site (cascading), Vaccine (empty = MR + IPV) and Campaign date. Each filter applies only to charts whose dataset has that column.
+**Filters:** Region → District → Cluster → Facility (cascading), Vaccine (empty = MR + IPV) and Campaign date. Each filter applies only to charts whose dataset has that column.
 
 ## Files
 
@@ -45,7 +45,7 @@ The dashboard has four tabs. Supervision and Complaints are hidden for this rele
 | `docker-compose.yml` | Elasticsearch 8.19, Postgres 16, Redis, Trino 484, Superset 6.1 |
 | `trino/catalog/hcm.properties` | **Point this at the real HCM ES cluster** (host, port, auth) |
 | `tools/load_field_data.py` | Loads the field-database workbook into ES and `data/sites.csv` into `dim_site` |
-| `data/sites.csv` | Sites: code, name, district, facility type, coordinates and where they came from |
+| `data/sites.csv` | Zambezi facilities: code, name, cluster, facility type, coordinates and where they came from |
 | `tools/build_boundaries.py` | Builds approximate district polygons → `data/districts.geojson` |
 | `tools/load_microplan.py` | Loads the microplan `.xlsx`, shapes and products into Postgres |
 | `tools/datasets.py` | All dataset SQL. **Index names and fields are defined in one place** |
@@ -85,9 +85,9 @@ tools/.venv/bin/python -I tools/build_superset.py
 * **Campaign day comes from the date** (9 Nov = day 1, 11 days). The workbook's sheets disagree: Children calls 10 Nov day 1; Agg and Stock call it day 2.
 * **Vials in hand in the district store** = vials returned unopened on the latest day; the workbook has no store stock. Days of stock = that ÷ average daily vials opened (last 3 days).
 * **Sankey store layers** (national, regional, district) are not in the field data; they are the sums of the site layer.
-* **Facility type** comes from the site name (Health Centre / Clinic); other sites are outreach points, and Masokotwani is a school. Two sites (Homba Clinic, Nchichimani) have no coordinates in the source and none in OpenStreetMap, so they sit at their district centre.
-* **Zambezi has three districts: Katima Mulilo, Bukalo and Sangwali**, taken from the workbook's Cluster column (owner's instruction; there is no separate cluster level). The microplan has only Katima Mulilo for the whole region, so `tools/load_field_data.py` replaces it with the three. Their shapes are approximate (the region split around each district's sites, `data/zambezi_districts.geojson`); the Bukalo and Sangwali boundary codes are dashboard-assigned. Microplan targets stay on Katima Mulilo, because the microplan does not split them. The synthetic sync users, all listed under Katima Mulilo in the microplan, are spread over the three districts in proportion to their number of sites.
-* **App sync is synthetic.** The field database has no sync records, so `tools/load_field_data.py` writes `field-user-sync-v1` with a stable synthetic status per frontline user in the microplan (about 93% synced, about 86% of vaccinators downsynced), limited on the dashboard to districts that uploaded field data. Labelled synthetic on both dashboards.
+* **Facility type** comes from the site name (Health Centre / Clinic); other sites are outreach points, and Masokotwani is a school. Two sites (Homba Clinic, Nchichimani) have no coordinates in the source and none in OpenStreetMap, so they sit at their cluster centre.
+* **Hierarchy: Region > District > Cluster > Facility** (owner's instruction, 17 Nov 2026; "site" in the data and column names is shown as "Facility"). Districts: Katima (Zambezi), Oshakati (Oshana), Windhoek (Khomas). Clusters: Zambezi's from the workbook's Cluster column (Bukalo, Katima Mulilo, Sangwali); Oshana's from its workbook (Oshakati Clinic, Oshakati Health Centre); Khomas is the Katutura cluster (owner's instruction; the workbook labels it Windhoek Central Hospital). `tools/load_field_data.py` renames the microplan's single Zambezi district "Katima Mulilo" to "Katima" (same boundary code and targets) so it is not confused with the Katima Mulilo cluster; it refuses a database still holding the old three-district split (rerun `tools/load_microplan.py`). Clusters have no shapes, so maps stay at district level; the synthetic sync users in Zambezi are spread over its three clusters by facility count.
+* **App sync is synthetic.** The field database has no sync records, so `tools/load_field_data.py` writes `field-user-sync-v1` with a stable synthetic status per frontline user in the microplan (about 93% synced, about 86% of vaccinators downsynced), limited on the dashboard to the Katima district's clusters. Labelled synthetic on both dashboards.
 * **Zero-dose and AEFI are synthetic.** The field database records neither, so `tools/load_field_data.py` adds stable synthetic flags per child (zero-dose about 4%, higher for younger children; AEFI about 1.2 per 1,000 doses), flagged `zero_dose_synthetic` / `aefi_synthetic`. They are not labelled synthetic on the dashboards (owner's instruction); real `Zero_Dose` / `AEFI` columns in the workbook replace them automatically.
 * **Superset maps can't print numbers on points** or size them inside multi-layer maps, so the Superset site map shows the numbers on hover; the review page draws numbered clusters.
 * **Gender is synthetic.** The field database has no gender column, so `tools/load_field_data.py` gives each child a stable synthetic gender (about 50.7% male) and flags it `gender_synthetic = 1`. The gender pies are not labelled synthetic on the dashboards. A real `Gender` column in the workbook replaces it automatically.

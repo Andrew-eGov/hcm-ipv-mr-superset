@@ -1,4 +1,4 @@
-site_code,site_name,district,facility_type,team_note,latitude,longitude,coord_source
+site_code,site_name,cluster,facility_type,team_note,latitude,longitude,coord_source
 S01,Bukalo Health Centre,Bukalo,Health centre,+ team 4,-17.712,24.529,Field database (Agg_IPV)
 S02,Ngoma Clinic,Bukalo,Clinic,+ team 3,-17.92,24.709,Field database (Agg_IPV)
 S03,Mbalasinte Clinic,Bukalo,Clinic,+ team 1,-17.79167,25.025,Field database (Agg_IPV)

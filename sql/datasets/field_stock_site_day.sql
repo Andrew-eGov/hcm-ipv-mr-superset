@@ -1,5 +1,5 @@
 SELECT * FROM (
-SELECT s.region, s.district, s.boundary_code, s.site_code, s.site_name, s.facility_type, s.data_scope, s.latitude, s.longitude,
+SELECT s.region, s.district, s.cluster, s.boundary_code, s.site_code, s.site_name, s.facility_type, s.data_scope, s.latitude, s.longitude,
        f.vaccine AS product, f.vaccine AS product_label,
        CAST(f.event_date AS date) AS event_date, f.campaign_day, f.source_campaign_day,
        CAST(f.target AS double) AS target,

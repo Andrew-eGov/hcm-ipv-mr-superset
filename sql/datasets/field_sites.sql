@@ -8,7 +8,7 @@ WITH n AS (SELECT site_code,
        sum(CASE WHEN product = 'IPV' THEN vials_issued_net END) AS ipv_issued,
        sum(CASE WHEN product = 'IPV' THEN vials_needed END) AS ipv_needed
        FROM (
-SELECT s.region, s.district, s.boundary_code, s.site_code, s.site_name, s.facility_type, s.data_scope, s.latitude, s.longitude,
+SELECT s.region, s.district, s.cluster, s.boundary_code, s.site_code, s.site_name, s.facility_type, s.data_scope, s.latitude, s.longitude,
        f.vaccine AS product, f.vaccine AS product_label,
        CAST(f.event_date AS date) AS event_date, f.campaign_day, f.source_campaign_day,
        CAST(f.target AS double) AS target,
@@ -26,7 +26,7 @@ SELECT s.region, s.district, s.boundary_code, s.site_code, s.site_name, s.facili
 FROM hcm.default."field-site-day-v1" f
 JOIN microplan.public.dim_site s ON s.site_code = f.site_code
 JOIN microplan.public.dim_product p ON p.product_code = f.vaccine) b GROUP BY 1)
-SELECT s.region, s.district, s.boundary_code, s.site_code, s.site_name, s.facility_type, s.data_scope, s.site_name AS "Site", s.latitude, s.longitude, s.coord_source, s.team_note,
+SELECT s.region, s.district, s.cluster, s.boundary_code, s.site_code, s.site_name, s.facility_type, s.data_scope, s.site_name AS "Facility", s.cluster AS "Cluster name", s.district AS "District name", s.latitude, s.longitude, s.coord_source, s.team_note,
        z.children AS "Children vaccinated", c.mr_vaccinated AS "MR delivered", c.ipv_vaccinated AS "IPV delivered",
        z.zero_dose_children AS "Zero-dose children", z.zero_dose_children AS zero_dose_children,
        CASE WHEN c.mr_coverage_pct IS NULL THEN 'No data'
@@ -52,7 +52,7 @@ SELECT site_code, sum(CASE WHEN product = 'MR' THEN vaccinated END) AS mr_vaccin
        sum(CASE WHEN product = 'MR' THEN vaccinated END) / nullif(sum(CASE WHEN product = 'MR' THEN target END), 0) * 100 AS mr_coverage_pct,
        sum(CASE WHEN product = 'IPV' THEN vaccinated END) / nullif(sum(CASE WHEN product = 'IPV' THEN target END), 0) * 100 AS ipv_coverage_pct
 FROM (
-SELECT s.region, s.district, s.boundary_code, s.site_code, s.site_name, s.facility_type, s.data_scope, s.latitude, s.longitude,
+SELECT s.region, s.district, s.cluster, s.boundary_code, s.site_code, s.site_name, s.facility_type, s.data_scope, s.latitude, s.longitude,
        f.vaccine AS product, f.vaccine AS product_label,
        CAST(f.event_date AS date) AS event_date, f.campaign_day, f.source_campaign_day,
        CAST(f.target AS double) AS target,

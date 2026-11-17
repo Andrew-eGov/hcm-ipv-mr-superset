@@ -4,7 +4,7 @@ Facts live in Elasticsearch (tools/load_field_data.py): field-site-day-v1 (one d
 site x date x vaccine) and field-child-v1 (one doc per child). Dimensions live in the
 `microplan` Postgres catalog (dim_site, dim_district, dim_product, ...). Trino joins them.
 
-Every dataset exposes region, district and site_name where they apply (the
+Every dataset exposes region, district, cluster and site_name (facility) where they apply (the
 native filters are scoped by those column names) plus product and event_date.
 Keep SQL comments out of the SQL strings: Superset wraps them in a subquery.
 
@@ -20,7 +20,7 @@ CAMPAIGN_START = "DATE '2026-11-09'"
 CAMPAIGN_DAYS = 11
 WASTAGE_ALLOWED = 0.05
 
-DIMS = "s.region, s.district, s.boundary_code, s.site_code, s.site_name, s.facility_type, s.data_scope"
+DIMS = "s.region, s.district, s.cluster, s.boundary_code, s.site_code, s.site_name, s.facility_type, s.data_scope"
 
 
 def site_day_base():
@@ -63,7 +63,7 @@ def ds_site_day():
 def ds_progress_pie():
     """Vaccinated vs remaining to target, one row per site-day x vaccine x slice (Overview pie)."""
     return f"""
-SELECT b.region, b.district, b.site_name, b.product, b.event_date, t.slice, t.slice_order, t.children
+SELECT b.region, b.district, b.cluster, b.site_name, b.product, b.event_date, t.slice, t.slice_order, t.children
 FROM ({site_day_base()}) b
 CROSS JOIN UNNEST(ARRAY['Vaccinated', 'Remaining to target'], ARRAY[1, 2],
                   ARRAY[b.vaccinated, b.target - b.vaccinated]) AS t(slice, slice_order, children)"""
@@ -72,7 +72,7 @@ CROSS JOIN UNNEST(ARRAY['Vaccinated', 'Remaining to target'], ARRAY[1, 2],
 def ds_coverage_long():
     """Children vaccinated and target as rows (measure, children), so a chart can show both numbers on hover."""
     return f"""
-SELECT b.region, b.district, b.site_name, b.product, b.product_label, b.event_date, m.measure, m.children
+SELECT b.region, b.district, b.cluster, b.site_name, b.product, b.product_label, b.event_date, m.measure, m.children
 FROM ({site_day_base()}) b
 CROSS JOIN UNNEST(ARRAY['Vaccinated', 'Target'], ARRAY[b.vaccinated, b.target]) AS m(measure, children)"""
 
@@ -80,7 +80,7 @@ CROSS JOIN UNNEST(ARRAY['Vaccinated', 'Target'], ARRAY[b.vaccinated, b.target]) 
 def ds_age():
     """Children vaccinated by age group; labels exactly as in the field database (differ by vaccine)."""
     return f"""
-SELECT b.region, b.district, b.site_name, b.product, b.product_label, b.event_date,
+SELECT b.region, b.district, b.cluster, b.site_name, b.product, b.product_label, b.event_date,
        t.age_group, t.age_order, t.vaccinated
 FROM ({site_day_base()}) b
 CROSS JOIN UNNEST(ARRAY['6-11 months', '14 weeks-11 months', '12-59 months', '5-10 years'], ARRAY[1, 1, 2, 3],
@@ -158,7 +158,7 @@ WITH n AS (SELECT site_code,
        sum(CASE WHEN product = 'IPV' THEN vials_issued_net END) AS ipv_issued,
        sum(CASE WHEN product = 'IPV' THEN vials_needed END) AS ipv_needed
        FROM ({site_day_base()}) b GROUP BY 1)
-SELECT {DIMS}, s.site_name AS "Site", s.latitude, s.longitude, s.coord_source, s.team_note,
+SELECT {DIMS}, s.site_name AS "Facility", s.cluster AS "Cluster name", s.district AS "District name", s.latitude, s.longitude, s.coord_source, s.team_note,
        z.children AS "Children vaccinated", c.mr_vaccinated AS "MR delivered", c.ipv_vaccinated AS "IPV delivered",
        z.zero_dose_children AS "Zero-dose children", z.zero_dose_children AS zero_dose_children,
        CASE WHEN c.mr_coverage_pct IS NULL THEN 'No data'
@@ -187,7 +187,7 @@ def ds_stock_flow():
     """Sankey links, in vials: National > Regional > District store > site > opened / returned unopened.
     Store layers are not in the field database: they are the sums of the site layer."""
     return f"""
-SELECT b.region, b.district, b.site_name, b.product, b.event_date, l.source, l.target, l.vials
+SELECT b.region, b.district, b.cluster, b.site_name, b.product, b.event_date, l.source, l.target, l.vials
 FROM ({stock_site_day()}) b
 CROSS JOIN UNNEST(
   ARRAY[b.product || ' · National store', b.product || ' · ' || b.region || ' regional store',
@@ -209,20 +209,20 @@ def ds_stock_days():
 WITH b AS ({stock_site_day()}),
  g AS (SELECT max(event_date) AS last_date FROM b),
  w AS (SELECT count(DISTINCT event_date) AS n FROM b, g WHERE b.event_date > date_add('day', -3, g.last_date))
-SELECT b.region, b.district, b.site_name, b.product, b.product_label,
+SELECT b.region, b.district, b.cluster, b.site_name, b.product, b.product_label,
        sum(CASE WHEN b.event_date = g.last_date THEN b.vials_returned_unopened ELSE 0 END) AS vials_in_hand,
        sum(CASE WHEN b.event_date > date_add('day', -3, g.last_date) THEN b.vials_opened ELSE 0 END) / CAST(max(w.n) AS double) AS daily_vials_opened,
        date_diff('day', {CAMPAIGN_START}, max(g.last_date)) + 1 AS campaign_day,
        {CAMPAIGN_DAYS} AS campaign_days_total,
        {CAMPAIGN_DAYS} - (date_diff('day', {CAMPAIGN_START}, max(g.last_date)) + 1) AS campaign_days_remaining
 FROM b CROSS JOIN g CROSS JOIN w
-GROUP BY 1, 2, 3, 4, 5"""
+GROUP BY 1, 2, 3, 4, 5, 6"""
 
 
 def ds_stock_days_long():
     """Days of stock inputs as rows (measure, vials), so the chart can show both numbers on hover."""
     return f"""
-SELECT d.region, d.district, d.site_name, d.product, d.product_label, m.measure, m.vials
+SELECT d.region, d.district, d.cluster, d.site_name, d.product, d.product_label, m.measure, m.vials
 FROM ({ds_stock_days()}) d
 CROSS JOIN UNNEST(ARRAY['Vials in hand', 'Vials opened a day'], ARRAY[CAST(d.vials_in_hand AS double), d.daily_vials_opened])
   AS m(measure, vials)"""
@@ -232,7 +232,7 @@ def ds_wastage_long():
     """Wastage inputs as rows (measure, doses) for site-days with vial data: doses in opened vials and children
     vaccinated, so the chart can show both numbers on hover."""
     return f"""
-SELECT b.region, b.district, b.site_name, b.product, b.product_label, b.event_date, m.measure, m.doses
+SELECT b.region, b.district, b.cluster, b.site_name, b.product, b.product_label, b.event_date, m.measure, m.doses
 FROM ({stock_site_day()}) b
 CROSS JOIN UNNEST(ARRAY['Doses in opened vials', 'Children vaccinated'], ARRAY[b.doses_opened, CAST(b.vaccinated AS double)])
   AS m(measure, doses)
@@ -251,11 +251,11 @@ def ds_sync():
     """App sync per frontline user (SYNTHETIC until HCM is connected), for districts that uploaded field data:
     'Frontline workers' = vaccinators and registrars who synced at least once; 'Vaccinators downsynced'."""
     return f"""
-SELECT u.region, y.district, 'Frontline workers' AS user_group, u.user_id AS entity_id, y.synced, y.synthetic
+SELECT u.region, y.district, y.cluster, 'Frontline workers' AS user_group, u.user_id AS entity_id, y.synced, y.synthetic
 FROM {SYNC} y JOIN {MP}.dim_user u ON u.user_id = y.user_id
 WHERE y.district IN (SELECT DISTINCT district FROM {MP}.dim_site WHERE data_scope = 'full')
 UNION ALL
-SELECT u.region, y.district, 'Vaccinators downsynced', u.user_id, y.downsynced, y.synthetic
+SELECT u.region, y.district, y.cluster, 'Vaccinators downsynced', u.user_id, y.downsynced, y.synthetic
 FROM {SYNC} y JOIN {MP}.dim_user u ON u.user_id = y.user_id
 WHERE y.role_group = 'VACCINATOR' AND y.district IN (SELECT DISTINCT district FROM {MP}.dim_site WHERE data_scope = 'full')"""
 

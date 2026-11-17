@@ -1,7 +1,7 @@
-SELECT d.region, d.district, d.site_name, d.product, d.product_label, m.measure, m.vials
+SELECT d.region, d.district, d.cluster, d.site_name, d.product, d.product_label, m.measure, m.vials
 FROM (
 WITH b AS (SELECT * FROM (
-SELECT s.region, s.district, s.boundary_code, s.site_code, s.site_name, s.facility_type, s.data_scope, s.latitude, s.longitude,
+SELECT s.region, s.district, s.cluster, s.boundary_code, s.site_code, s.site_name, s.facility_type, s.data_scope, s.latitude, s.longitude,
        f.vaccine AS product, f.vaccine AS product_label,
        CAST(f.event_date AS date) AS event_date, f.campaign_day, f.source_campaign_day,
        CAST(f.target AS double) AS target,
@@ -21,13 +21,13 @@ JOIN microplan.public.dim_site s ON s.site_code = f.site_code
 JOIN microplan.public.dim_product p ON p.product_code = f.vaccine) x WHERE x.data_scope = 'full'),
  g AS (SELECT max(event_date) AS last_date FROM b),
  w AS (SELECT count(DISTINCT event_date) AS n FROM b, g WHERE b.event_date > date_add('day', -3, g.last_date))
-SELECT b.region, b.district, b.site_name, b.product, b.product_label,
+SELECT b.region, b.district, b.cluster, b.site_name, b.product, b.product_label,
        sum(CASE WHEN b.event_date = g.last_date THEN b.vials_returned_unopened ELSE 0 END) AS vials_in_hand,
        sum(CASE WHEN b.event_date > date_add('day', -3, g.last_date) THEN b.vials_opened ELSE 0 END) / CAST(max(w.n) AS double) AS daily_vials_opened,
        date_diff('day', DATE '2026-11-09', max(g.last_date)) + 1 AS campaign_day,
        11 AS campaign_days_total,
        11 - (date_diff('day', DATE '2026-11-09', max(g.last_date)) + 1) AS campaign_days_remaining
 FROM b CROSS JOIN g CROSS JOIN w
-GROUP BY 1, 2, 3, 4, 5) d
+GROUP BY 1, 2, 3, 4, 5, 6) d
 CROSS JOIN UNNEST(ARRAY['Vials in hand', 'Vials opened a day'], ARRAY[CAST(d.vials_in_hand AS double), d.daily_vials_opened])
   AS m(measure, vials)
