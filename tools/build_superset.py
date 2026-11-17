@@ -334,7 +334,7 @@ def point_map(tab, row, width, name, ds, column, colours, tooltip, filters=(), l
 def zero_dose_aefi_cards(tab, row, width=6):
     """Two cards: zero-dose children and AEFI cases (both SYNTHETIC until the field data records them)."""
     big(tab, row, width, f"{tab}: zero-dose children", "field_child_status", M("SUM(zero_dose)", "Zero-dose"),
-        "Zero-dose children vaccinated", ",d", [TIME_F()], note="no prior routine dose")
+        "Zero-dose children identified", ",d", [TIME_F()], note="no prior routine dose")
     big(tab, row, width, f"{tab}: AEFI cases", "field_child_status", M("SUM(aefi)", "AEFI"),
         "AEFI cases", ",d", [TIME_F()], note="adverse events following immunization")
 

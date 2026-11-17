@@ -394,7 +394,7 @@ function siteIcon(type) { const [c, t] = FTYPES[type] || ["op", ""]; return L.di
 const statusRows = () => D.status.filter(r => siteOk(S(r.code)) && dateOk(r.d));
 function zeroAefiCards() {
   const rs = statusRows();
-  return `<div class="grid">${kpi("c6", "Zero-dose children vaccinated", fmt(sum(rs, r => r.zd)), `<div class="t">no prior routine dose</div>`)}${
+  return `<div class="grid">${kpi("c6", "Zero-dose children identified", fmt(sum(rs, r => r.zd)), `<div class="t">no prior routine dose</div>`)}${
     kpi("c6", "AEFI cases", fmt(sum(rs, r => r.aefi)), `<div class="t">adverse events following immunization</div>`)}</div>`;
 }
 const COV_STATUS = [["Low coverage (below 50%)", "#d03b3b"], ["Mid coverage (50–90%)", "#fab219"], ["High coverage (90%+)", "#2e9e44"]];
