@@ -1,0 +1,3 @@
+site_code,site_name,region,district,facility_type,team_note,latitude,longitude,coord_source
+OS01,Ou-Nick Clinic,Oshana,Oshakati,Clinic,team 26,-17.7827,15.6986,Approximate (Oshakati town - clinic not found in OSM)
+OM01,Ruacana border post,Omusati,Outapi,Border post,team 14,-17.4391,14.3625,Approximate (Ruacana town - border post not found in OSM)

@@ -13,6 +13,15 @@ Superset 6.1 dashboard for the DIGIT HCM **Namibia IPV + MR integrated campaign*
   3. Add every real site to `data/sites.csv`.
 - **Hidden / not started:** Supervision and Complaints tabs (hidden by the review; the synthetic version is in `tools/legacy/`), zero-dose and AEFI (no source in the field data), row-level security, production hosting.
 
+## Tally data (prepared, not loaded)
+
+`../Namibia_MR-IPV_Tally_Ingestion.xlsx` (`TALLY_XLSX`) holds MoHSS paper-tally counts for two more sites: Ou-Nick Clinic (Oshana, Oshakati, 9-12 Nov, day 4 provisional) and Ruacana border post (Omusati, Outapi, 13 Nov). The owner asked to prepare it for **Overview and Coverage only** (no inventory or sync data) and **not ingest yet**.
+
+- Ready: `tools/load_tally.py` (dry run by default; `--load` is deliberately blocked) and `data/tally_sites.csv` (both sites, approximate town coordinates, not in OSM).
+- Before loading, the owner must choose a target rule (daily targets are blank on every sheet): `none` (counts only, left out of coverage %) or `per-team` (district microplan target / teams / 11 days; gives Ou-Nick MR 136 and IPV 66 a day).
+- To load, also: append tally site-day docs after `load_field_data.py` (which recreates `field-site-day-v1`), add `data/tally_sites.csv` to `dim_site`, sum coverage targets only where a target exists, union tally zero-dose / AEFI / co-administration counts into the cards and the "children by vaccines received" pie (the tally has no child line list or gender), and add a "Border post" facility type to the facility map.
+- Data checks to raise with the owner: Ou-Nick day 4 is provisional; Ruacana's "IPV also MR" is 0 (blank on paper); zero-dose, MR refusal and MR AEFI are missing for Ou-Nick day 4 and Ruacana (left empty, not 0).
+
 ## How the pieces fit
 
 - `tools/load_field_data.py` loads the workbook into ES: `field-child-v1` (one doc per child) and `field-site-day-v1` (one doc per site × date × vaccine, merging the Agg and Stock sheets on site code + date). It also loads `data/sites.csv` into Postgres `dim_site`.
