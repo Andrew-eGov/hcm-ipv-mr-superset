@@ -336,12 +336,12 @@ function choro(id, geo, keyProp, keyOf, p, label, fitData = false) {
   covLegend(id, label);
 }
 function siteIcon(type) { const [c, t] = FTYPES[type] || ["op", ""]; return L.divIcon({ className: "", html: `<span class="fi ${c}"><b>${t}</b></span>`, iconSize: [20, 20], iconAnchor: [10, 10] }); }
-// ---------------------------------------------------------------- zero-dose / AEFI (synthetic) and numbered site clusters
+// ---------------------------------------------------------------- zero-dose / AEFI and numbered site clusters
 const statusRows = () => D.status.filter(r => siteOk(S(r.code)) && dateOk(r.d));
 function zeroAefiCards() {
   const rs = statusRows();
-  return `<div class="grid">${kpi("c6", "Zero-dose children vaccinated", fmt(sum(rs, r => r.zd)), `<div class="t">no prior routine dose · synthetic until recorded</div>`)}${
-    kpi("c6", "AEFI cases", fmt(sum(rs, r => r.aefi)), `<div class="t">adverse events following immunization · synthetic until recorded</div>`)}</div>`;
+  return `<div class="grid">${kpi("c6", "Zero-dose children vaccinated", fmt(sum(rs, r => r.zd)), `<div class="t">no prior routine dose</div>`)}${
+    kpi("c6", "AEFI cases", fmt(sum(rs, r => r.aefi)), `<div class="t">adverse events following immunization</div>`)}</div>`;
 }
 const COV_STATUS = [["Low coverage (below 50%)", "#d03b3b"], ["Mid coverage (50–90%)", "#fab219"], ["High coverage (90%+)", "#2e9e44"]];
 function covStatus(a) {   // colour = the lower of MR and IPV coverage (only the selected vaccine when the filter is set)
@@ -357,7 +357,7 @@ function siteAgg(codes) {
 }
 function aggTip(title, a) {
   return `<b>${title}</b><br>Children vaccinated: <b>${fmt(a.kids)}</b><br>MR delivered: <b>${fmt(a.MR.v)}</b> (${pct(a.MR.v / a.MR.t)} of target)` +
-    `<br>IPV delivered: <b>${fmt(a.IPV.v)}</b> (${pct(a.IPV.v / a.IPV.t)} of target)<br>Zero-dose children: <b>${fmt(a.zd)}</b> <i>(synthetic)</i>` +
+    `<br>IPV delivered: <b>${fmt(a.IPV.v)}</b> (${pct(a.IPV.v / a.IPV.t)} of target)<br>Zero-dose children: <b>${fmt(a.zd)}</b>` +
     `<br>${covStatus(a)[0]}`;
 }
 function fitLater(m, pts) {   // the card may still be laying out: resize the map, then zoom to the sites
@@ -389,12 +389,12 @@ function zeroDoseMap(id) {
   const col = v => ramp[br.filter(t => v >= t).length];
   const layer = L.geoJSON(D.geo_districts, {
     style: ft => { const v = byD[ft.properties.district]; return { fillColor: v == null ? "transparent" : col(v), fillOpacity: v == null ? 0 : .8, color: css("--axis"), weight: 1 }; },
-    onEachFeature: (ft, l) => { const v = byD[ft.properties.district]; if (v != null) l.bindTooltip(`<b>${esc(ft.properties.district)}</b><br>Zero-dose children: <b>${fmt(v)}</b> <i>(synthetic)</i>`, { sticky: true }); },
+    onEachFeature: (ft, l) => { const v = byD[ft.properties.district]; if (v != null) l.bindTooltip(`<b>${esc(ft.properties.district)}</b><br>Zero-dose children: <b>${fmt(v)}</b>`, { sticky: true }); },
   }).addTo(m);
   const pts = [];
   D.sites.filter(s => siteOk(s)).forEach(s => { const a = siteAgg([s.code]); if (!a.kids) return;
     L.marker([s.lat, s.lon], { icon: numIcon(a.zd, "#7b3fa0", 22 + Math.min(14, a.zd / 2)) })
-      .bindTooltip(`<b>${esc(s.name)}</b><br>Zero-dose children: <b>${fmt(a.zd)}</b> of ${fmt(a.kids)} vaccinated <i>(synthetic)</i>`).addTo(m); pts.push([s.lat, s.lon]); });
+      .bindTooltip(`<b>${esc(s.name)}</b><br>Zero-dose children: <b>${fmt(a.zd)}</b> of ${fmt(a.kids)} vaccinated`).addTo(m); pts.push([s.lat, s.lon]); });
   fitLater(m, pts);
   document.getElementById(id + "-lg").innerHTML = `<span>Districts: zero-dose children</span>` + ramp.map((c, i) => `<span><span class="sw" style="background:${c}"></span>${["0–25", "25–50", "50–75", "75–100", "100+"][i]}</span>`).join("") +
     `<span><span class="dot" style="background:#7b3fa0"></span> Sites: number = zero-dose children</span>`;
@@ -444,7 +444,7 @@ R.Overview = () => {
     `<div class="grid">${card("c6", "ovReg", "Coverage by region (MR and IPV)")}${card("c6", "ovDist", "Coverage by district (MR and IPV)")}</div>`,
     `<div class="grid">${prods().map(p => card("c6", `ovMap${p}`, `Map: ${p} coverage % by district`, "", "map")).join("")}</div>`,
     `<div class="grid">${card("c12", "ovFac", "Map: health facilities by type", "", "map")}</div>`,
-    `<div class="grid">${prods().map(p => card("c6", `ovGen${p}`, `Gender distribution (${p})`, "<b>Synthetic</b>: the field database has no gender yet, so each child is given a stable synthetic gender (≈50.7% male)")).join("")}</div>`,
+    `<div class="grid">${prods().map(p => card("c6", `ovGen${p}`, `Gender distribution (${p})`)).join("")}</div>`,
     () => {
       prods().forEach(p => { const rs = rows(p); simplePie(`ovPie${p}`, [{ name: "Vaccinated", value: vac(rs) }, { name: "Remaining to target", value: Math.max(0, tgt(rs) - vac(rs)) }], [css("--good"), css("--grid")]); });
       covBars("ovReg", s => s.region); covBars("ovDist", s => s.district);
@@ -457,7 +457,7 @@ R.Overview = () => {
 };
 R.Coverage = () => [
   zeroAefiCards(),
-  `<div class="grid">${card("c6", "cvClu", "Map: vaccination sites, clustered (numbers = children vaccinated)", "Colour shows coverage: green high, amber mid, red low. Hover for MR and IPV delivered.", "map")}${card("c6", "cvZD", "Map: zero-dose children by district and site (synthetic)", "", "map")}</div>`,
+  `<div class="grid">${card("c6", "cvClu", "Map: vaccination sites, clustered (numbers = children vaccinated)", "Colour shows coverage: green high, amber mid, red low. Hover for MR and IPV delivered.", "map")}${card("c6", "cvZD", "Map: zero-dose children by district and site", "", "map")}</div>`,
   `<div class="grid">${prods().map(p => card("c6", `cvMap${p}`, `Map: ${p} coverage % by region`, "", "map")).join("")}</div>`,
   `<div class="grid">${card("c6", "cvReg", "Coverage by region (MR and IPV)")}${card("c6", "cvDist", "Coverage by district (MR and IPV)")}</div>`,
   `<div class="grid">${prods().map(p => card("c6", `cvAge${p}`, `${p}: children vaccinated by age group`, "Age groups as recorded in the field database")).join("")}</div>`,
@@ -563,7 +563,7 @@ R.Inventory = () => {
   ];
 };
 function syncRows(g) { return D.sync.filter(r => r.g === g && (!F.region || r.region === F.region) && (!F.district || r.district === F.district)); }
-function syncStrip(title, g, okLabel, rateLabel, sub = "Synthetic until HCM is connected") {
+function syncStrip(title, g, okLabel, rateLabel, sub = "Vaccinators") {
   const rs = syncRows(g), tot = sum(rs, r => r.total), ok = sum(rs, r => r.synced);
   return `<div class="strip"><div class="lbl"><span>⟲</span><div>${title}<small>${sub}</small></div></div>
   <div class="m k"><div class="t">Total</div><div class="v">${fmt(tot)}</div></div>
@@ -578,9 +578,9 @@ function syncBars(id, g, label) {
 }
 R["Data Quality"] = () => [
   syncStrip("Vaccinators downsynced", "Vaccinators downsynced", "Downsynced at least once", "Downsync rate"),
-  syncStrip("Frontline workers", "Frontline workers", "Synced at least once", "Sync rate", "Vaccinators and registrars · synthetic until HCM is connected"),
-  `<div class="grid">${card("c6", "dqSync", "Frontline sync rate by district", "Synthetic: vaccinators and registrars who synced at least once")}${card("c6", "dqDown", "Downsync rate by district", "Synthetic: vaccinators who downsynced at least once")}</div>`,
-  `<div class="grid"><div class="card c12 banner">Sync figures are synthetic: the field database has no app sync records, so each frontline user in the microplan (vaccinators and registrars) gets a stable synthetic status until HCM is connected. Shown only for districts that uploaded field data; the site, vaccine and date filters do not apply.</div></div>`,
+  syncStrip("Frontline workers", "Frontline workers", "Synced at least once", "Sync rate", "Vaccinators and registrars"),
+  `<div class="grid">${card("c6", "dqSync", "Frontline sync rate by district", "Vaccinators and registrars who synced at least once")}${card("c6", "dqDown", "Downsync rate by district", "Vaccinators who downsynced at least once")}</div>`,
+  `<div class="grid"><div class="card c12 banner">Shown for districts that uploaded field data; the site, vaccine and date filters do not apply to sync.</div></div>`,
   () => { syncBars("dqSync", "Frontline workers", "Sync rate"); syncBars("dqDown", "Vaccinators downsynced", "Downsync rate"); },
 ];
 

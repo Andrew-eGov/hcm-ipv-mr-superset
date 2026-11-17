@@ -150,7 +150,7 @@ WITH n AS (SELECT site_code,
        FROM ({site_day_base()}) b GROUP BY 1)
 SELECT {DIMS}, s.site_name AS "Site", s.latitude, s.longitude, s.coord_source, s.team_note,
        z.children AS "Children vaccinated", c.mr_vaccinated AS "MR delivered", c.ipv_vaccinated AS "IPV delivered",
-       z.zero_dose_children AS "Zero-dose children (synthetic)", z.zero_dose_children AS zero_dose_children,
+       z.zero_dose_children AS "Zero-dose children", z.zero_dose_children AS zero_dose_children,
        CASE WHEN c.mr_coverage_pct IS NULL THEN 'No data'
             WHEN least(c.mr_coverage_pct, coalesce(c.ipv_coverage_pct, c.mr_coverage_pct)) < 50 THEN 'Low coverage (below 50%)'
             WHEN least(c.mr_coverage_pct, coalesce(c.ipv_coverage_pct, c.mr_coverage_pct)) < 90 THEN 'Mid coverage (50-90%)'

@@ -318,9 +318,9 @@ def point_map(tab, row, width, name, ds, column, colours, tooltip, filters=(), l
 def zero_dose_aefi_cards(tab, row, width=6):
     """Two cards: zero-dose children and AEFI cases (both SYNTHETIC until the field data records them)."""
     big(tab, row, width, f"{tab}: zero-dose children", "field_child_status", M("SUM(zero_dose)", "Zero-dose"),
-        "Zero-dose children vaccinated", ",d", [TIME_F()], note="no prior routine dose - synthetic until recorded")
+        "Zero-dose children vaccinated", ",d", [TIME_F()], note="no prior routine dose")
     big(tab, row, width, f"{tab}: AEFI cases", "field_child_status", M("SUM(aefi)", "AEFI"),
-        "AEFI cases", ",d", [TIME_F()], note="adverse events following immunization - synthetic until recorded")
+        "AEFI cases", ",d", [TIME_F()], note="adverse events following immunization")
 
 
 def markdown(tab, row, width, height, text):
@@ -375,7 +375,7 @@ def define(days_remaining):
                    "sites are outreach points, and Masokotwani is a school. Homba Clinic and Nchichimani have no "
                    "coordinates and sit at their district centre.")
     for v, f in VACCINES:
-        pie(T, 6, 6, f"Overview: gender distribution ({v}) - synthetic", "field_children", "gender", M("SUM(children)", "Children"),
+        pie(T, 6, 6, f"Overview: gender distribution ({v})", "field_children", "gender", M("SUM(children)", "Children"),
             filters=f + [TIME_F()], legend=True)
 
     # ---------------- Coverage
@@ -385,12 +385,12 @@ def define(days_remaining):
     # label points by a number, so the numbers (children, MR and IPV delivered, zero-dose) are in the hover tooltip.
     point_map(T, "0m", 4, "Coverage map: vaccination sites by coverage", "field_sites", "coverage_status", COVERAGE_STATUS,
               ("Site", "Children vaccinated", "MR delivered", "IPV delivered", "MR coverage %", "IPV coverage %",
-               "Zero-dose children (synthetic)"),
+               "Zero-dose children"),
               legend_title="Coverage", legend_width=2,
               note="Colour = the lower of MR and IPV coverage at the site. Hover a site for children vaccinated, "
                    "MR and IPV delivered and zero-dose children.")
     # Map 2: zero-dose children (synthetic) by district, with the numbers in the tooltip
-    choropleth(T, "0m", 6, "Coverage map: zero-dose children by district (synthetic)", "field_district_map",
+    choropleth(T, "0m", 6, "Coverage map: zero-dose children by district", "field_district_map",
                M("MAX(zero_dose_children)", "Zero-dose children"), tooltip=("district", "zero_dose_children", "zero_dose_pct"),
                scheme="oranges", breaks=["0", "25", "50", "75", "100", "150"], viewport=ZAMBEZI)
     for v in ("MR", "IPV"):
@@ -504,28 +504,23 @@ def define(days_remaining):
     T = "Data Quality"
     g = [F("user_group", "IN", ["Vaccinators downsynced"])]
     big(T, 0, 4, "DQ: vaccinators total", "field_sync", M("COUNT(*)", "Vaccinators"), "Vaccinators downsynced: total",
-        ",d", g, note="synthetic until HCM is connected")
+        ",d", g)
     big(T, 0, 4, "DQ: vaccinators downsynced", "field_sync", M("SUM(synced)", "Downsynced"),
-        "Vaccinators downsynced at least once", ",d", g, note="synthetic until HCM is connected")
-    big(T, 0, 4, "DQ: downsync rate", "field_sync", M("AVG(CAST(synced AS double))", "Rate"), "Downsync rate", ".1%", g,
-        note="synthetic until HCM is connected")
+        "Vaccinators downsynced at least once", ",d", g)
+    big(T, 0, 4, "DQ: downsync rate", "field_sync", M("AVG(CAST(synced AS double))", "Rate"), "Downsync rate", ".1%", g)
     fl = [F("user_group", "IN", ["Frontline workers"])]
     big(T, 1, 4, "DQ: frontline workers total", "field_sync", M("COUNT(*)", "Workers"), "Frontline workers: total",
-        ",d", fl, note="vaccinators and registrars - synthetic")
+        ",d", fl, note="vaccinators and registrars")
     big(T, 1, 4, "DQ: frontline workers synced", "field_sync", M("SUM(synced)", "Synced"),
-        "Frontline workers synced at least once", ",d", fl, note="synthetic until HCM is connected")
+        "Frontline workers synced at least once", ",d", fl)
     big(T, 1, 4, "DQ: frontline sync rate", "field_sync", M("AVG(CAST(synced AS double))", "Rate"), "Frontline sync rate",
-        ".1%", fl, note="synthetic until HCM is connected")
-    bar(T, "4b", 6, "DQ: frontline sync rate by district (synthetic)", "field_sync", "district",
+        ".1%", fl)
+    bar(T, "4b", 6, "DQ: frontline sync rate by district", "field_sync", "district",
         [M("AVG(CAST(synced AS double))", "Sync rate")], fmt=".0%", filters=[F("user_group", "IN", ["Frontline workers"])],
         sort_by_metric=True, x_axis_sort_asc=True, y_max=1)
-    bar(T, "4b", 6, "DQ: downsync rate by district (synthetic)", "field_sync", "district",
+    bar(T, "4b", 6, "DQ: downsync rate by district", "field_sync", "district",
         [M("AVG(CAST(synced AS double))", "Downsync rate")], fmt=".0%",
         filters=[F("user_group", "IN", ["Vaccinators downsynced"])], x_axis_sort_asc=True, y_max=1)
-    markdown(T, 5, 12, 14, BANNER.format(text=(
-        "Sync figures are synthetic: the field database has no app sync records, so each frontline user in the "
-        "microplan (vaccinators and registrars) gets a stable synthetic status until HCM is connected. Shown only "
-        "for districts that uploaded field data.")))
 
 
 TABS = ["Overview", "Coverage", "Inventory", "Data Quality"]
