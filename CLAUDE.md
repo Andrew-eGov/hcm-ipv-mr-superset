@@ -22,6 +22,16 @@ Superset 6.1 dashboard for the DIGIT HCM **Namibia IPV + MR integrated campaign*
 - To load, also: append tally site-day docs after `load_field_data.py` (which recreates `field-site-day-v1`), add `data/tally_sites.csv` to `dim_site`, sum coverage targets only where a target exists, union tally zero-dose / AEFI / co-administration counts into the cards and the "children by vaccines received" pie (the tally has no child line list or gender), and add a "Border post" facility type to the facility map.
 - Data checks to raise with the owner: Ou-Nick day 4 is provisional; Ruacana's "IPV also MR" is 0 (blank on paper); zero-dose, MR refusal and MR AEFI are missing for Ou-Nick day 4 and Ruacana (left empty, not 0).
 
+## Regional child databases (prepared, not loaded)
+
+`../Oshana_region_MR_IPV_child_database.xlsx` and `../Khomas_region_MR_IPV_child_database.xlsx` have the Zambezi layout without stock (Children, Agg_MR, Agg_IPV), for 12-13 Nov. The owner asked to prepare them for **coverage only** and **not ingest yet**.
+
+- Ready: `tools/load_regional.py` (dry run by default; `--load` is blocked) and `data/regional_sites.csv` (clean names, facility types, districts: Oshana -> Oshakati, Khomas -> Windhoek, the microplan's only district in each region; `include=no` drops the 'test' site).
+- Totals after dropping the test site: Oshana MR 251 / IPV 178 (3 sites), Khomas MR 32 / IPV 22 (4 sites); line list and aggregates agree.
+- Decisions before loading: (1) targets are blank on every row (same choice as the tally: none, or a per-team estimate); (2) Ou-Nick Clinic on 12 Nov is in both this file (MR 137, IPV 96) and the tally workbook (MR 201, IPV 132, provisional): load one source only.
+- Data notes: Campaign_Day is written 3 ahead of the date (12 Nov = "day 7"), so day comes from the date; 27 children aged 5-10 years got IPV (outside the IPV age range; included in IPV totals, missing from the age-group columns); "Oshakati Health" (cluster "Oshakati Clinic") needs its proper facility name; Maximilian Clinic has no coordinates (placed at the centre of the other Khomas sites).
+- Loading will need the same changes as the tally for coverage-only sites: append after `load_field_data.py`, add the sites to `dim_site`, and sum coverage targets only where a target exists.
+
 ## How the pieces fit
 
 - `tools/load_field_data.py` loads the workbook into ES: `field-child-v1` (one doc per child) and `field-site-day-v1` (one doc per site × date × vaccine, merging the Agg and Stock sheets on site code + date). It also loads `data/sites.csv` into Postgres `dim_site`.
