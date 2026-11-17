@@ -219,6 +219,26 @@ FROM b CROSS JOIN g CROSS JOIN w
 GROUP BY 1, 2, 3, 4, 5"""
 
 
+def ds_stock_days_long():
+    """Days of stock inputs as rows (measure, vials), so the chart can show both numbers on hover."""
+    return f"""
+SELECT d.region, d.district, d.site_name, d.product, d.product_label, m.measure, m.vials
+FROM ({ds_stock_days()}) d
+CROSS JOIN UNNEST(ARRAY['Vials in hand', 'Vials opened a day'], ARRAY[CAST(d.vials_in_hand AS double), d.daily_vials_opened])
+  AS m(measure, vials)"""
+
+
+def ds_wastage_long():
+    """Wastage inputs as rows (measure, doses) for site-days with vial data: doses in opened vials and children
+    vaccinated, so the chart can show both numbers on hover."""
+    return f"""
+SELECT b.region, b.district, b.site_name, b.product, b.product_label, b.event_date, m.measure, m.doses
+FROM ({stock_site_day()}) b
+CROSS JOIN UNNEST(ARRAY['Doses in opened vials', 'Children vaccinated'], ARRAY[b.doses_opened, CAST(b.vaccinated AS double)])
+  AS m(measure, doses)
+WHERE b.vials_opened IS NOT NULL"""
+
+
 def ds_campaign_day():
     """Latest campaign day with field data, and the campaign length (9-19 Nov 2026 = 11 days)."""
     return f"""
@@ -254,6 +274,8 @@ DATASETS = {
     "field_sites": (ds_sites, None),
     "field_stock_flow": (ds_stock_flow, "event_date"),
     "field_stock_days": (ds_stock_days, None),
+    "field_stock_days_long": (ds_stock_days_long, None),
+    "field_wastage_long": (ds_wastage_long, "event_date"),
     "field_campaign_day": (ds_campaign_day, None),
     "field_sync": (ds_sync, None),
 }

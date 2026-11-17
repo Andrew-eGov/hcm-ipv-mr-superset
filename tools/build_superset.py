@@ -239,21 +239,28 @@ def table(tab, row, width, name, ds, groupby, metrics, height=60, order=None, fi
           column_config=formats or {}, conditional_formatting=cond or [])
 
 
+def bars_with_numbers(tab, row, width, name, ds, x, metric, value_col, fmt, number_fmt, filters=(), lines=(),
+                      values=True, height=50, sort=None):
+    """Bars (MR and IPV side by side) with the absolute numbers behind them on hover. Superset's bar chart can only
+    show the plotted metric in its tooltip, so a mixed chart adds the inputs (a long dataset: measure, value_col) as
+    tiny points on a second axis: they appear in the hover, not as bars."""
+    chart(tab, row, width, height, name, ds, "mixed_timeseries", x_axis=x,
+          metrics=[metric], groupby=["product_label"], adhoc_filters=list(filters), seriesType="bar", show_value=values,
+          only_total=False, y_axis_format=fmt, y_axis_bounds=[0, None], stack=False,
+          metrics_b=[M(f"SUM({value_col})", value_col.capitalize())], groupby_b=["product_label", "measure"],
+          adhoc_filters_b=list(filters), seriesTypeB="scatter", markerEnabledB=True, markerSizeB=1, show_valueB=False,
+          yAxisIndex=0, yAxisIndexB=1, y_axis_format_secondary=number_fmt, show_legend=True, legendOrientation="top",
+          legendType="scroll", rich_tooltip=True, color_scheme="supersetColors", annotation_layers=list(lines),
+          xAxisLabelRotation=45, row_limit=10000, row_limit_b=10000, zoomable=False, truncateYAxis=False,
+          x_axis_sort_asc=True, **({"x_axis_sort": sort} if sort else {}))
+
+
 def coverage_bars(tab, row, width, name, x, height=50):
-    """Coverage % bars (MR and IPV side by side) with the absolute numbers on hover. Superset's bar chart can only
-    show the plotted metric in its tooltip, so a mixed chart adds children vaccinated and target as tiny points on a
-    second axis: they appear in the hover, not as bars."""
+    """Coverage % bars with children vaccinated and target on hover."""
     cov = M("SUM(CASE WHEN measure = 'Vaccinated' THEN children END) / NULLIF(SUM(CASE WHEN measure = 'Target' THEN children END), 0)",
             "Coverage")
-    chart(tab, row, width, height, name, "field_coverage_long", "mixed_timeseries", x_axis=x,
-          metrics=[cov], groupby=["product_label"], adhoc_filters=[TIME_F()], seriesType="bar", show_value=True,
-          only_total=False, y_axis_format=".0%", y_axis_bounds=[0, None], stack=False,
-          metrics_b=[M("SUM(children)", "Children")], groupby_b=["product_label", "measure"],
-          adhoc_filters_b=[TIME_F()], seriesTypeB="scatter", markerEnabledB=True, markerSizeB=1, show_valueB=False,
-          yAxisIndex=0, yAxisIndexB=1, y_axis_format_secondary=",d", show_legend=True, legendOrientation="top",
-          legendType="scroll", rich_tooltip=True, color_scheme="supersetColors",
-          xAxisLabelRotation=45, row_limit=10000, row_limit_b=10000, zoomable=False, truncateYAxis=False,
-          x_axis_sort_asc=True)
+    bars_with_numbers(tab, row, width, name, "field_coverage_long", x, cov, "children", ".0%", ",d",
+                      filters=[TIME_F()], height=height)
 
 
 def handlebars(tab, row, width, name, ds, metrics, template, filters=(), height=20):
@@ -342,6 +349,12 @@ MR_WASTAGE_REPORTED = 0.001
 WASTAGE = M(f"CASE WHEN SUM(vials_opened) IS NULL THEN NULL "   # no vial data (coverage-only regions): no wastage
             f"WHEN MIN(product) = 'MR' AND MAX(product) = 'MR' THEN {MR_WASTAGE_REPORTED} "
             f"ELSE GREATEST(CAST(0 AS double), {PCT('SUM(doses_opened) - SUM(CASE WHEN doses_opened IS NOT NULL THEN vaccinated END)', 'SUM(doses_opened)')}) END", "Wastage")
+# Same rules over field_wastage_long (rows: measure = 'Doses in opened vials' / 'Children vaccinated', doses)
+_OPENED, _VAC = "SUM(CASE WHEN measure = 'Doses in opened vials' THEN doses END)", "SUM(CASE WHEN measure = 'Children vaccinated' THEN doses END)"
+WASTAGE_LONG = M(f"CASE WHEN MIN(product) = 'MR' AND MAX(product) = 'MR' THEN {MR_WASTAGE_REPORTED} "
+                 f"ELSE GREATEST(CAST(0 AS double), {PCT(f'{_OPENED} - {_VAC}', _OPENED)}) END", "Wastage")
+DAYS_OF_STOCK = M("SUM(CASE WHEN measure = 'Vials in hand' THEN vials END) / "
+                  "NULLIF(SUM(CASE WHEN measure = 'Vials opened a day' THEN vials END), 0)", "Days of stock")
 
 BANNER = """<div style="padding:4px 2px;font-family:Inter,Roboto,sans-serif;line-height:1.5">
 <span style="font-size:13px;opacity:.8">Namibia · NAM-09-01-IPV-MR_NID · Round 1 · 9-19 Nov 2026 (11 days)</span><br/>
@@ -458,14 +471,15 @@ def define(days_remaining):
             f"{v}: vials issued (net)", ",d", f + [TIME_F()])
         big(T, r, 2, f"Inventory: {v} wastage", "field_stock_site_day", WASTAGE, f"{v}: wastage % (allowed 5%)", ".1%",
             f + [TIME_F()], note="reported figure" if v == "MR" else "")
-    bar(T, 4, 6, "Inventory: days of stock left by site", "field_stock_days", "site_name",
-        [M("SUM(vials_in_hand) / NULLIF(SUM(daily_vials_opened), 0)", "Days of stock")], ["product_label"], fmt=",.1f",
-        sort_by_metric=False, x_axis_sort="Days of stock", x_axis_sort_asc=True,
-        lines=[LINE_AT(days_remaining, f"Campaign days remaining ({days_remaining})")], values=False)
-    bar(T, 4, 6, "Inventory: wastage % by district (allowed 5%)", "field_stock_site_day", "district", [WASTAGE],
-        ["product_label"], fmt=".1%", filters=[TIME_F()], lines=[LINE_AT(0.05, "Allowed 5%")])
-    bar(T, 5, 12, "Inventory: wastage % by site (allowed 5%)", "field_stock_site_day", "site_name", [WASTAGE],
-        ["product_label"], fmt=".1%", filters=[TIME_F()], lines=[LINE_AT(0.05, "Allowed 5%")], height=50, values=False)
+    # hover shows the numbers behind each bar: vials in hand and vials opened a day; doses opened and children vaccinated
+    bars_with_numbers(T, 4, 6, "Inventory: days of stock left by site", "field_stock_days_long", "site_name",
+                      DAYS_OF_STOCK, "vials", ",.1f", ",.1f", sort="Days of stock",
+                      lines=[LINE_AT(days_remaining, f"Campaign days remaining ({days_remaining})")], values=False)
+    bars_with_numbers(T, 4, 6, "Inventory: wastage % by district (allowed 5%)", "field_wastage_long", "district",
+                      WASTAGE_LONG, "doses", ".1%", ",d", filters=[TIME_F()], lines=[LINE_AT(0.05, "Allowed 5%")])
+    bars_with_numbers(T, 5, 12, "Inventory: wastage % by site (allowed 5%)", "field_wastage_long", "site_name",
+                      WASTAGE_LONG, "doses", ".1%", ",d", filters=[TIME_F()], lines=[LINE_AT(0.05, "Allowed 5%")],
+                      values=False)
     for v, f in VACCINES:
         bar(T, 6, 6, f"Inventory: {v} cumulative vials issued (net) vs vials needed, by site", "field_stock_site_day", "site_name",
             [M("SUM(vials_issued_net)", "Vials issued (net)"), M("ROUND(SUM(vials_needed), 1)", "Vials needed")],

@@ -334,6 +334,11 @@ function draw(id, opt) {
   charts[id].setOption(Object.assign(base(), opt));
 }
 const pctTip = { valueFormatter: v => v == null ? "–" : (v * 100).toFixed(1) + "%" };
+const detailTip = line => Object.assign(base().tooltip, { formatter: ps => `<b>${esc(ps[0].axisValue)}</b>` +
+  ps.map(x => `<br>${x.marker}${x.seriesName}: ${line(x.data || {})}`).join("") });
+const wasteData = rs0 => { const rs = rs0.filter(r => r.opened != null), w = waste(rs);   // bar value + doses opened / children vaccinated
+  return { value: isFinite(w) ? +w.toFixed(4) : null, opened: dosesOpened(rs), vac: vac(rs), n: rs.length }; };
+const wasteLine = d => !d.n ? "no vial data" : `<b>${pct(d.value, 1)}</b> · ${fmt(d.opened)} doses in opened vials, ${fmt(d.vac)} children vaccinated`;
 function covBars(id, keyOf, rotate = 0, sort = true) {   // MR and IPV side by side; % on the bars, absolute numbers on hover
   const g = groupCov(keyOf), keys = Object.keys(g);
   if (sort) keys.sort((a, b) => cov(g[b]) - cov(g[a]));
@@ -562,17 +567,18 @@ R.Inventory = () => {
     `<div class="grid">${card("c12", "ivTbl", "Stock by site and campaign day", "", "table")}</div>`,
     () => {
       const ss = D.sites.filter(s => siteOk(s) && isStockSite(s)).map(s => s.code);
-      const dos = ss.map(c => ({ c, v: Object.fromEntries(prods().map(p => [p, stockDays(p, D.site_day.filter(r => r.code === c && r.p === p)).days])) }))
-        .sort((a, b) => (a.v[prods()[0]] || 0) - (b.v[prods()[0]] || 0));
+      const dos = ss.map(c => ({ c, v: Object.fromEntries(prods().map(p => [p, stockDays(p, D.site_day.filter(r => r.code === c && r.p === p))])) }))
+        .sort((a, b) => (a.v[prods()[0]].days || 0) - (b.v[prods()[0]].days || 0));
       draw("ivDos", { xAxis: axisCat(dos.map(x => S(x.c).name), 40), yAxis: axisVal(v => fmt1(v)),
-        series: prods().map((p, i) => barS(p, dos.map(x => isFinite(x.v[p]) ? +x.v[p].toFixed(1) : 0), VCOL[p], i ? {} : { markLine: refLine(left, `Campaign days remaining (${left})`) })) });
+        tooltip: detailTip(d => `<b>${isFinite(d.days) ? fmt1(d.days) + " days" : "–"}</b> · ${fmt(d.inHand)} vials in hand, ${fmt1(d.daily)} vials opened a day`),
+        series: prods().map((p, i) => barS(p, dos.map(x => ({ value: isFinite(x.v[p].days) ? +x.v[p].days.toFixed(1) : 0, ...x.v[p] })), VCOL[p], i ? {} : { markLine: refLine(left, `Campaign days remaining (${left})`) })) });
       const wd = uniq(D.sites.filter(s => siteOk(s) && isStockSite(s)).map(s => s.district));
-      draw("ivWD", { tooltip: Object.assign(base().tooltip, pctTip), xAxis: axisCat(wd), yAxis: axisVal(v => pct(v)),
-        series: prods().map((p, i) => barS(p, wd.map(d => +waste(stockRows(p).filter(r => S(r.code).district === d)).toFixed(4)), VCOL[p],
+      draw("ivWD", { tooltip: detailTip(wasteLine), xAxis: axisCat(wd), yAxis: axisVal(v => pct(v)),
+        series: prods().map((p, i) => barS(p, wd.map(d => wasteData(stockRows(p).filter(r => S(r.code).district === d))), VCOL[p],
           Object.assign({ label: { show: true, position: "top", formatter: x => pct(x.value, 1), color: css("--ink-2") } }, i ? {} : { markLine: refLine(WASTE_OK, "Allowed 5%") }))) });
       const sn = D.sites.filter(s => siteOk(s) && isStockSite(s));
-      draw("ivWS", { tooltip: Object.assign(base().tooltip, pctTip), xAxis: axisCat(sn.map(s => s.name), 40), yAxis: axisVal(v => pct(v)),
-        series: prods().map((p, i) => barS(p, sn.map(s => +waste(stockRows(p).filter(r => r.code === s.code)).toFixed(4) || 0), VCOL[p], i ? {} : { markLine: refLine(WASTE_OK, "Allowed 5%") })) });
+      draw("ivWS", { tooltip: detailTip(wasteLine), xAxis: axisCat(sn.map(s => s.name), 40), yAxis: axisVal(v => pct(v)),
+        series: prods().map((p, i) => barS(p, sn.map(s => wasteData(stockRows(p).filter(r => r.code === s.code))), VCOL[p], i ? {} : { markLine: refLine(WASTE_OK, "Allowed 5%") })) });
       prods().forEach(p => {
         const g = sn.map(s => { const rs = stockRows(p).filter(r => r.code === s.code); return { n: s.name, iss: sum(rs, net), nd: +sum(rs, need).toFixed(1) }; }).sort((a, b) => b.nd - a.nd);
         draw(`ivCum${p}`, { xAxis: axisCat(g.map(x => x.n), 40), yAxis: axisVal(),
