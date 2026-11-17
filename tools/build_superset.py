@@ -374,9 +374,6 @@ def define(days_remaining):
               note="Facility type comes from the site name in the field database (Health Centre / Clinic); other "
                    "sites are outreach points, and Masokotwani is a school. Homba Clinic and Nchichimani have no "
                    "coordinates and sit at their district centre.")
-    for v, f in VACCINES:
-        pie(T, 6, 6, f"Overview: gender distribution ({v})", "field_children", "gender", M("SUM(children)", "Children"),
-            filters=f + [TIME_F()], legend=True)
 
     # ---------------- Coverage
     T = "Coverage"
@@ -402,6 +399,9 @@ def define(days_remaining):
         bar(T, 3, 6, f"Coverage: {v} children vaccinated by age group", "field_age", "age_group",
             [M("SUM(vaccinated)", "Children vaccinated")], filters=f + [TIME_F()], sort_by_metric=False,
             x_axis_sort="age_order", x_axis_sort_asc=True, xAxisLabelRotation=0)
+    for v, f in VACCINES:
+        pie(T, "3g", 6, f"Coverage: gender distribution ({v})", "field_children", "gender", M("SUM(children)", "Children"),
+            filters=f + [TIME_F()], legend=True)
     bar(T, 4, 12, "Coverage by site (MR and IPV)", "field_site_day", "site_name", [COVERAGE], ["product_label"], fmt=".0%",
         filters=[TIME_F()], values=False)
     # Mixed chart so the two series look different: actual = filled area, planned = line with dot markers;
