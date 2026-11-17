@@ -595,8 +595,13 @@ R.Inventory = () => {
       draw("ivWS", { tooltip: detailTip(wasteLine), xAxis: axisCat(sn.map(s => s.name), 40), yAxis: axisVal(v => pct(v)),
         series: prods().map((p, i) => barS(p, sn.map(s => wasteData(stockRows(p).filter(r => r.code === s.code))), VCOL[p], i ? {} : { markLine: refLine(WASTE_OK, "Allowed 5%") })) });
       prods().forEach(p => {
-        const g = sn.map(s => { const rs = stockRows(p).filter(r => r.code === s.code); return { n: s.name, iss: sum(rs, net), nd: +sum(rs, need).toFixed(1) }; }).sort((a, b) => b.nd - a.nd);
+        // avg = vials opened per day, over the days with vial data (current date filter)
+        const g = sn.map(s => { const rs = stockRows(p).filter(r => r.code === s.code), od = rs.filter(r => r.opened != null);
+          return { n: s.name, iss: sum(rs, net), nd: +sum(rs, need).toFixed(1), avg: od.length ? sum(od, r => r.opened) / od.length : NaN, days: od.length }; }).sort((a, b) => b.nd - a.nd);
         draw(`ivCum${p}`, { xAxis: axisCat(g.map(x => x.n), 40), yAxis: axisVal(),
+          tooltip: Object.assign(base().tooltip, { formatter: ps => { const x = g[ps[0].dataIndex];
+            return `<b>${esc(x.n)}</b>` + ps.map(q => `<br>${q.marker}${q.seriesName}: <b>${q.seriesIndex ? fmt1(x.nd) : fmt(x.iss)}</b>`).join("") +
+              `<br>Average consumption: <b>${fmt1(x.avg)}</b> vials opened a day` + (x.days ? ` <span style="opacity:.7">(${x.days} day${x.days > 1 ? "s" : ""})</span>` : ""); } }),
           series: [barS("Vials issued (net)", g.map(x => ({ value: x.iss, itemStyle: { color: css(x.iss < x.nd ? "--critical" : VCOL[p]) } })), VCOL[p]),
                    barS("Vials needed", g.map(x => x.nd), "--axis")] });
       });

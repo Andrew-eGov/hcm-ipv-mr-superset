@@ -494,9 +494,18 @@ def define(days_remaining):
                       WASTAGE_LONG, "doses", ".1%", ",d", filters=[TIME_F()], lines=[LINE_AT(0.05, "Allowed 5%")],
                       values=False)
     for v, f in VACCINES:
-        bar(T, 6, 6, f"Inventory: {v} cumulative vials issued (net) vs vials needed, by facility", "field_stock_site_day", "site_name",
-            [M("SUM(vials_issued_net)", "Vials issued (net)"), M("ROUND(SUM(vials_needed), 1)", "Vials needed")],
-            filters=f + [TIME_F()], sort_by_metric=True, values=False)
+        # Mixed chart: the two bars, plus average consumption (vials opened a day) as an invisible point on a
+        # second axis, so it shows in the hover tooltip only
+        chart(T, 6, 6, 50, f"Inventory: {v} cumulative vials issued (net) vs vials needed, by facility", "field_stock_site_day",
+              "mixed_timeseries", x_axis="site_name",
+              metrics=[M("SUM(vials_issued_net)", "Vials issued (net)"), M("ROUND(SUM(vials_needed), 1)", "Vials needed")],
+              groupby=[], adhoc_filters=f + [TIME_F()], seriesType="bar", show_value=False, stack=False,
+              metrics_b=[M("SUM(vials_opened) / NULLIF(CAST(COUNT(vials_opened) AS double), 0)", "Average consumption (vials opened a day)")],
+              groupby_b=[], adhoc_filters_b=f + [TIME_F()], seriesTypeB="scatter", markerEnabledB=True, markerSizeB=1,
+              show_valueB=False, yAxisIndex=0, yAxisIndexB=1, y_axis_format="SMART_NUMBER", y_axis_format_secondary=",.1f",
+              y_axis_bounds=[0, None], show_legend=True, legendOrientation="top", legendType="scroll", rich_tooltip=True,
+              color_scheme="supersetColors", xAxisLabelRotation=45, row_limit=10000, row_limit_b=10000, zoomable=False,
+              truncateYAxis=False, x_axis_sort_asc=True)
     table(T, 7, 12, "Inventory: cumulative stock by facility (red = not enough vials for target)", "field_stock_site_day",
           ["district", "cluster", "site_name", "product_label"],
           [M("SUM(vials_issued_net)", "Vials issued (net)"), M("ROUND(SUM(vials_needed), 1)", "Vials needed"),
