@@ -173,7 +173,7 @@ footer { color: var(--muted); font-size: 12px; padding: 0 24px 30px; max-width: 
   <div class="top">
     <h1>IPV + MR Integrated Campaign · Namibia 2026</h1>
     <span class="sub">NAM-09-01-IPV-MR_NID · Round 1 · 9-19 Nov 2026 (11 days)</span>
-    <span class="badge" title="Static snapshot exported from the Superset build">REVIEW SNAPSHOT · ZAMBEZI FIELD DATA</span>
+    <span class="badge" title="Static snapshot exported from the Superset build">REVIEW SNAPSHOT · FIELD DATA: ZAMBEZI, OSHANA, KHOMAS</span>
     <button class="btn ftoggle" id="ftoggle" aria-expanded="false" aria-controls="filters">☰ Filters</button>
   </div>
   <div class="filters" id="filters">
@@ -792,7 +792,7 @@ async function start() {
   const tg = document.getElementById("ftoggle"), hdr = document.querySelector("header");
   tg.onclick = () => { const o = hdr.classList.toggle("open"); tg.setAttribute("aria-expanded", String(o)); };
   wireTheme();
-  document.getElementById("foot").innerHTML = `Snapshot generated ${esc(D.generated)} from the Superset build: Zambezi region MR/IPV child and stock database (field data to ${dlabel(lastDate())}, campaign day ${dayNo(lastDate())} of ${D.campaign_days}). Aggregates only; no child records are published. District shapes are approximate (geoBoundaries + OSM-derived). Map tiles © OpenStreetMap contributors. Supervision and Complaints are hidden for this release.`;
+  document.getElementById("foot").innerHTML = `Snapshot generated ${esc(D.generated)} from the Superset build: Zambezi MR/IPV child and stock database, and Oshana and Khomas child databases (coverage only; daily targets from the microplan) (field data to ${dlabel(lastDate())}, campaign day ${dayNo(lastDate())} of ${D.campaign_days}). Aggregates only; no child records are published. District shapes are approximate (geoBoundaries + OSM-derived). Map tiles © OpenStreetMap contributors. Supervision and Complaints are hidden for this release.`;
   render();
   window.addEventListener("resize", () => Object.values(charts).forEach(c => c.resize()));
   matchMedia("(max-width: 640px)").addEventListener("change", () => render());   // phone <-> desktop: redraw axes and maps
