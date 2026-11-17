@@ -92,6 +92,7 @@ section.tab { display: none; } section.tab.on { display: block; }
 table { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
 th, td { text-align: right; padding: 6px 8px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
 th:first-child, td:first-child, th.l, td.l { text-align: left; }
+.sortb { all: unset; cursor: pointer; } .sortb:hover { color: var(--ink); } .sortb:focus-visible { outline: 2px solid var(--accent, #F47738); outline-offset: 2px; }
 th { color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .03em; position: sticky; top: 0; background: var(--card); }
 .tbl { max-height: 420px; overflow: auto; }
 .pill { font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 999px; display: inline-flex; gap: 4px; align-items: center; }
@@ -284,11 +285,21 @@ function card(cls, id, title, note = "", kind = "chart") {
   const zoom = kind !== "zoom" ? "" : `<span class="zoombar" role="group" aria-label="Zoom"><button class="mini" data-zoom="${id}" data-z="-1" title="Zoom out" aria-label="Zoom out">−</button><span id="${id}-zl">100%</span><button class="mini" data-zoom="${id}" data-z="1" title="Zoom in" aria-label="Zoom in">+</button><button class="mini" data-zoom="${id}" data-z="0" title="Reset zoom">Reset</button></span>`;
   return `<div class="card ${cls}"><h3><span data-title="${id}">${title}</span>${zoom}${tool}</h3>${note ? `<p class="note">${note}</p>` : ""}${inner}</div>`;
 }
+// Tables: columns with `s` (a text accessor) are sortable. Default order is alphabetical by those columns,
+// left to right (district > cluster > facility); clicking a header sorts by it, clicking again reverses.
+const tsort = {};   // table id -> { i: column index, dir: 1 | -1 } once the viewer clicks a header
 function table(id, cols, rs) {
   const el = document.getElementById(id); if (!el) return;
-  el.innerHTML = `<table><thead><tr>${cols.map(c => `<th class="${c.l ? "l" : ""}">${c.h}</th>`).join("")}</tr></thead><tbody>${
-    rs.map(r => `<tr>${cols.map(c => `<td class="${c.l ? "l" : ""}" ${c.bg ? `style="${c.bg(r)}"` : ""}>${c.f ? c.f(r) : esc(r[c.k])}</td>`).join("")}</tr>`).join("") || `<tr><td colspan="${cols.length}" class="l">No rows for this selection</td></tr>`
+  const keys = cols.map((c, i) => c.s ? i : -1).filter(i => i >= 0), st = tsort[id];
+  const cmp = (a, b, i) => String(cols[i].s(a) ?? "").localeCompare(String(cols[i].s(b) ?? ""), undefined, { numeric: true });
+  const sorted = keys.length ? rs.slice().sort((a, b) => (st ? st.dir * cmp(a, b, st.i) : 0) || keys.reduce((r, i) => r || cmp(a, b, i), 0)) : rs;
+  const th = (c, i) => !c.s ? `<th class="${c.l ? "l" : ""}">${c.h}</th>` :
+    `<th class="l" aria-sort="${st && st.i === i ? (st.dir > 0 ? "ascending" : "descending") : !st && i === keys[0] ? "ascending" : "none"}"><button class="sortb" data-i="${i}" title="Sort by ${c.h}">${c.h}<span aria-hidden="true">${st && st.i === i ? (st.dir > 0 ? " ▲" : " ▼") : !st && keys.includes(i) ? " ▲" : " ⇅"}</span></button></th>`;
+  el.innerHTML = `<table><thead><tr>${cols.map(th).join("")}</tr></thead><tbody>${
+    sorted.map(r => `<tr>${cols.map(c => `<td class="${c.l ? "l" : ""}" ${c.bg ? `style="${c.bg(r)}"` : ""}>${c.f ? c.f(r) : esc(r[c.k])}</td>`).join("")}</tr>`).join("") || `<tr><td colspan="${cols.length}" class="l">No rows for this selection</td></tr>`
   }</tbody></table>`;
+  el.querySelectorAll(".sortb").forEach(b => b.onclick = () => { const i = +b.dataset.i;
+    tsort[id] = { i, dir: tsort[id] && tsort[id].i === i ? -tsort[id].dir : 1 }; table(id, cols, rs); });
 }
 const redIf = c => c ? "background:color-mix(in srgb, var(--critical) 18%, transparent)" : "";
 const vaxRow = (title, fn) => prods().map(p => fn(p)).join("");
@@ -545,7 +556,7 @@ R.Coverage = () => [
     const dl = uniq(D.sites.filter(s => siteOk(s)).map(s => s.cluster));
     draw("cvCluN", { xAxis: axisCat(dl, 30), yAxis: axisVal(), series: prods().map(p => barS(p, dl.map(c => vac(rows(p).filter(r => S(r.code).cluster === c))), VCOL[p])) });
     const g = by(rows(null), r => r.code + "|" + r.p);
-    table("cvTbl", [{ h: "District", l: 1, k: "district" }, { h: "Cluster", l: 1, k: "cluster" }, { h: "Facility", l: 1, k: "name" }, { h: "Type", l: 1, k: "type" }, { h: "Vaccine", l: 1, k: "p" },
+    table("cvTbl", [{ h: "District", l: 1, k: "district", s: r => r.district }, { h: "Cluster", l: 1, k: "cluster", s: r => r.cluster }, { h: "Facility", l: 1, k: "name", s: r => r.name }, { h: "Type", l: 1, k: "type" }, { h: "Vaccine", l: 1, k: "p" },
       { h: "Target", f: r => fmt(r.t) }, { h: "Children vaccinated", f: r => fmt(r.v) }, { h: "Coverage of target", f: r => pct(r.v / r.t, 1), bg: r => redIf(r.v / r.t < .5) },
       { h: "Remaining to target", f: r => fmt(r.t - r.v) }],
       Object.entries(g).map(([k, rs]) => ({ ...S(rs[0].code), p: rs[0].p, t: tgt(rs), v: vac(rs) })).sort(byHier));
@@ -590,9 +601,9 @@ R.Inventory = () => {
                    barS("Vials needed", g.map(x => x.nd), "--axis")] });
       });
       const ct = []; sn.forEach(s => prods().forEach(p => { const rs = stockRows(p).filter(r => r.code === s.code); if (rs.length) ct.push({ district: s.district, cluster: s.cluster, name: s.name, p, iss: sum(rs, net), nd: sum(rs, need), t: tgt(rs) }); }));
-      table("ivCumT", [{ h: "District", l: 1, k: "district" }, { h: "Cluster", l: 1, k: "cluster" }, { h: "Facility", l: 1, k: "name" }, { h: "Vaccine", l: 1, k: "p" }, { h: "Vials issued (net)", f: r => fmt(r.iss) },
+      table("ivCumT", [{ h: "District", l: 1, k: "district", s: r => r.district }, { h: "Cluster", l: 1, k: "cluster", s: r => r.cluster }, { h: "Facility", l: 1, k: "name", s: r => r.name }, { h: "Vaccine", l: 1, k: "p" }, { h: "Vials issued (net)", f: r => fmt(r.iss) },
         { h: "Vials needed", f: r => fmt1(r.nd) }, { h: "Vials short (-) or spare (+)", f: r => fmt1(r.iss - r.nd), bg: r => redIf(r.iss < r.nd) }, { h: "Target", f: r => fmt(r.t) }],
-        ct.sort((a, b) => (a.iss - a.nd) - (b.iss - b.nd)));
+        ct.sort((a, b) => a.p.localeCompare(b.p) * -1));
       const links = {};
       const add = (s, t, v) => { if (v > 0) links[s + "→" + t] = (links[s + "→" + t] || 0) + v; };
       stockRows(null).forEach(r => { const s = S(r.code), p = r.p, inflow = (r.rec || 0) + (r.add || 0);
@@ -612,11 +623,11 @@ R.Inventory = () => {
             `<br>Vials left over (returned unopened): <b>${fmt(sum(rs, r => r.ret))}</b><br>Vials used (issued net): <b>${fmt(iss)}</b>` +
             `<br>Vials needed for target: <b>${fmt1(nd)}</b><br>Vials ${gap < 0 ? "short" : "spare"}: <b>${fmt1(Math.abs(gap))}</b>` : "");
         }, isStockSite));
-      table("ivTbl", [{ h: "Date", l: 1, f: r => dlabel(r.d) }, { h: "District", l: 1, f: r => esc(S(r.code).district) }, { h: "Cluster", l: 1, f: r => esc(S(r.code).cluster) }, { h: "Facility", l: 1, f: r => esc(S(r.code).name) }, { h: "Vaccine", l: 1, k: "p" },
+      table("ivTbl", [{ h: "District", l: 1, f: r => esc(S(r.code).district), s: r => S(r.code).district }, { h: "Cluster", l: 1, f: r => esc(S(r.code).cluster), s: r => S(r.code).cluster }, { h: "Facility", l: 1, f: r => esc(S(r.code).name), s: r => S(r.code).name }, { h: "Date", l: 1, f: r => dlabel(r.d) }, { h: "Vaccine", l: 1, k: "p" },
         { h: "Vials received", f: r => fmt(r.rec) }, { h: "Additional vials received", f: r => fmt(r.add) }, { h: "Vials opened", f: r => fmt(r.opened) },
         { h: "Vials returned unopened", f: r => fmt(r.ret) }, { h: "Vials issued (net)", f: r => fmt(net(r)) }, { h: "Children vaccinated", f: r => fmt(r.vac) },
         { h: "Wastage", f: r => pct(waste([r]), 1), bg: r => redIf(waste([r]) > WASTE_OK) }],
-        stockRows(null).slice().sort((a, b) => a.d.localeCompare(b.d) || byHier(S(a.code), S(b.code)) || b.opened - a.opened));
+        stockRows(null).slice().sort((a, b) => a.d.localeCompare(b.d) || a.p.localeCompare(b.p) * -1));
     },
   ];
 };

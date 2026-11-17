@@ -236,6 +236,12 @@ def pie(tab, row, width, name, ds, groupby, metric, height=50, filters=(), legen
           outerRadius=58, number_format="SMART_NUMBER", sort_by_metric=True, show_total=False)
 
 
+# Default table order: alphabetical by district > cluster > facility (owner's instruction); every column header
+# also sorts on click (Superset tables sort client-side when server pagination is off).
+HIER_SORT = M("MIN(concat(district, chr(1), cluster, chr(1), site_name, chr(1), CAST(event_date AS varchar), chr(1), product_label))",
+              "Sort: district > cluster > facility")
+
+
 def table(tab, row, width, name, ds, groupby, metrics, height=60, order=None, filters=(), formats=None,
           cond=None, row_limit=1000, desc=True):
     chart(tab, row, width, height, name, ds, "table", query_mode="aggregate", groupby=groupby, metrics=metrics,
@@ -452,7 +458,7 @@ def define(days_remaining):
           cond=[{"colorScheme": "#ACE1C4", "column": "Coverage of target", "operator": "≥", "targetValue": 0.9},
                 {"colorScheme": "#FDE380", "column": "Coverage of target", "operator": "<", "targetValue": 0.9},
                 {"colorScheme": "#EFA1AA", "column": "Coverage of target", "operator": "<", "targetValue": 0.5}],
-          order=M("SUM(target)", "Target"), height=70, filters=[TIME_F()])
+          order=HIER_SORT, desc=False, height=70, filters=[TIME_F()])
 
     # ---------------- Inventory
     T = "Inventory"
@@ -495,7 +501,7 @@ def define(days_remaining):
           ["district", "cluster", "site_name", "product_label"],
           [M("SUM(vials_issued_net)", "Vials issued (net)"), M("ROUND(SUM(vials_needed), 1)", "Vials needed"),
            M("ROUND(SUM(vials_issued_net) - SUM(vials_needed), 1)", "Vials short (-) or spare (+)"), M("SUM(target)", "Target")],
-          order=M("ROUND(SUM(vials_issued_net) - SUM(vials_needed), 1)", "Vials short (-) or spare (+)"), desc=False,
+          order=HIER_SORT, desc=False,
           cond=[{"colorScheme": "#EFA1AA", "column": "Vials short (-) or spare (+)", "operator": "<", "targetValue": 0}],
           filters=[TIME_F()], height=60)
     chart(T, 8, 12, 72, "Inventory: stock flow in vials - national > regional > district store > facility > opened / returned",
@@ -510,13 +516,13 @@ def define(days_remaining):
                   legend_title=f"{v}: vials issued (net) vs needed",
                   note="Vials needed = target ÷ doses per vial × 1.05, summed over all campaign days with data.")
     table(T, 10, 12, "Inventory: stock by facility and campaign day", "field_stock_site_day",
-          ["event_date", "district", "cluster", "site_name", "product_label"],
+          ["district", "cluster", "site_name", "event_date", "product_label"],
           [M("SUM(vials_received)", "Vials received"), M("SUM(additional_vials_received)", "Additional vials received"),
            M("SUM(vials_opened)", "Vials opened"), M("SUM(vials_returned_unopened)", "Vials returned unopened"),
            M("SUM(vials_issued_net)", "Vials issued (net)"), M("SUM(vaccinated)", "Children vaccinated"), WASTAGE],
           formats={"Wastage": {"d3NumberFormat": ".1%"}, "event_date": {"d3TimeFormat": "%d %b"}},
           cond=[{"colorScheme": "#EFA1AA", "column": "Wastage", "operator": ">", "targetValue": 0.05}],
-          order=M("SUM(vials_opened)", "Vials opened"), filters=[TIME_F()], height=70)
+          order=HIER_SORT, desc=False, filters=[TIME_F()], height=70)
 
     # ---------------- Data quality
     T = "Data Quality"
