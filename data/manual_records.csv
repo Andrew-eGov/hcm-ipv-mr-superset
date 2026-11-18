@@ -1,0 +1,2 @@
+site_code,site_name,region,district,cluster,facility_type,latitude,longitude,coord_source,date,vaccine,vaccinated
+M-2026-11-18-UNH,United Nations House,Khomas,Windhoek,Katutura,Outreach point,-22.5715254,17.1007511,"OSM Nominatim (United Nations, Klein Windhoek)",2026-11-18,MR,1

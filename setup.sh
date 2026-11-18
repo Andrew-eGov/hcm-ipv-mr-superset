@@ -73,6 +73,8 @@ if (( FIELD )); then
     step "Regional child databases (coverage only) -> Elasticsearch"
     tools/.venv/bin/python -I tools/load_regional.py --load "${regional[@]}" | tail -1
   fi
+  # Manually reported records (data/manual_records.csv), coverage only
+  tools/.venv/bin/python -I tools/load_manual.py
 else
   step "Sites -> Postgres"
   tools/.venv/bin/python -I tools/load_field_data.py --sites-only

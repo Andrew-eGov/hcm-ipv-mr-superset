@@ -31,6 +31,10 @@ Superset 6.1 dashboard for the DIGIT HCM **Namibia IPV + MR integrated campaign*
 - **Data handling:** 'test' site dropped (`include=no` in `data/regional_sites.csv`); IPV given to 5-10 year olds goes into the IPV 5-10 years age group; gender, zero-dose and AEFI get the same synthetic flags as Zambezi.
 - **Not loaded:** the MoHSS tally workbook (`tools/load_tally.py`, still dry-run). Ou-Nick Clinic 12 Nov is in both sources; loading the tally too would double-count it.
 
+## Manual records (loaded, coverage only)
+
+`data/manual_records.csv` holds records reported outside the workbooks, loaded by `tools/load_manual.py` (run by `setup.sh` after the regional loader). It has one row per site x date x vaccine and the same per-team target rule and `data_scope = 'coverage'` as the regional sites. There is no child line list, so these records count in children vaccinated and coverage but not in the age, gender or status breakdowns. First record (owner, 18 Nov 2026): United Nations House outreach point, Windhoek > Katutura, 1 MR child; vaccine and date assumed (MR, 18 Nov).
+
 ## How the pieces fit
 
 - `tools/load_field_data.py` loads the workbook into ES: `field-child-v1` (one doc per child) and `field-site-day-v1` (one doc per site × date × vaccine, merging the Agg and Stock sheets on site code + date). It also loads `data/sites.csv` into Postgres `dim_site`.
